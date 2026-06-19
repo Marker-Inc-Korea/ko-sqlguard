@@ -76,8 +76,6 @@ PG_FUNCTION_BENIGN = [
     "SELECT pg_client_encoding()",
     "SELECT pg_column_size(status) FROM orders",
     "SELECT pg_collation_for('x')",
-    # version() is its own typed node (not pg_*), must stay allowed
-    "SELECT version()",
     # ordinary application query with no pg_* call at all
     "SELECT id, status FROM orders WHERE id = 5",
 ]
@@ -90,6 +88,21 @@ def test_benign_pg_helpers_not_blocked(sql: str) -> None:
     assert not any(v.code == "blocked_function" for v in r.violations), [
         v.code for v in r.violations
     ]
+
+
+# Server-info reconnaissance functions (typed Anonymous/Current* nodes, not pg_*)
+# are reclassified as blocked — they leak server/session metadata to an attacker.
+PG_FUNCTION_RECON_TYPED = [
+    "SELECT version()",
+    "SELECT current_user",
+    "SELECT current_database()",
+]
+
+
+@pytest.mark.parametrize("sql", PG_FUNCTION_RECON_TYPED, ids=lambda s: s[:48])
+def test_server_info_recon_blocked(sql: str) -> None:
+    r = check(sql, policy=DEFAULT)
+    assert r.verdict is Verdict.BLOCK, sql
 
 
 def test_pg_function_prefix_gate_opt_out() -> None:

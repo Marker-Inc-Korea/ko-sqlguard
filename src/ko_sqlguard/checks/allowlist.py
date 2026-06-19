@@ -164,7 +164,7 @@ def check_columns(stmt: exp.Expression, policy: GuardPolicy) -> list[Violation]:
                         code="column_not_allowed",
                         # HIGH so the allowlist stays enforced at min_block_severity=HIGH
                         # (a MEDIUM here would silently demote the column allowlist to
-                        # advisory).
+                        # advisory — SQL-3).
                         severity=Severity.HIGH,
                         reason=f"qualified column {qualifier}.{name} does not resolve to any "
                         "in-scope table; rejected fail-closed",
@@ -196,7 +196,7 @@ def check_columns(stmt: exp.Expression, policy: GuardPolicy) -> list[Violation]:
                 violations.append(
                     Violation(
                         code="column_not_allowed",
-                        # HIGH: keep the allowlist enforced at min_block_severity=HIGH.
+                        # HIGH: keep the allowlist enforced at min_block_severity=HIGH (SQL-3).
                         severity=Severity.HIGH,
                         reason=f"unqualified column {name!r} is ambiguous with a "
                         "column-restricted table in scope; qualify it",
@@ -250,7 +250,7 @@ def _resolve_derived_column(
 def _star_violation() -> Violation:
     return Violation(
         code="column_not_allowed",
-        # HIGH: a column allowlist must keep blocking '*' even at min_block_severity=HIGH.
+        # HIGH: a column allowlist must keep blocking '*' even at min_block_severity=HIGH (SQL-3).
         severity=Severity.HIGH,
         reason="SELECT * over a column-restricted table cannot be constrained",
         action="block",
@@ -262,7 +262,7 @@ def _col_violation(name: str, qualifier: str | None) -> Violation:
     label = f"{qualifier}.{name}" if qualifier else name
     return Violation(
         code="column_not_allowed",
-        # HIGH: the column allowlist stays enforced at min_block_severity=HIGH.
+        # HIGH: the column allowlist stays enforced at min_block_severity=HIGH (SQL-3).
         severity=Severity.HIGH,
         reason=f"column {label!r} is not in the allowlist",
         action="block",

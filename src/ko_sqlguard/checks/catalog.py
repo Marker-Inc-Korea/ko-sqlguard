@@ -62,11 +62,11 @@ _TYPED_FUNC_NAMES: dict[str, str] = {
 
 
 def check_catalog(stmt: exp.Expression, policy: GuardPolicy) -> list[Violation]:
-    """Block reads of system catalogs / metadata schemas.
+    """Block reads of system catalogs / metadata schemas (Gap 1).
 
     Engages regardless of the table allowlist. A catalog table referenced
     ANYWHERE in the statement (including a UNION arm or subquery) blocks the whole
-    query — that also covers ``... UNION SELECT passwd FROM pg_shadow``.
+    query — that also covers ``... UNION SELECT passwd FROM pg_shadow`` (Gap 2).
     """
     if not policy.block_system_catalogs:
         return []
@@ -111,12 +111,12 @@ def check_catalog(stmt: exp.Expression, policy: GuardPolicy) -> list[Violation]:
 
 
 def check_sensitive_columns(stmt: exp.Expression, policy: GuardPolicy) -> list[Violation]:
-    """Block reads of denylisted sensitive columns and whole-row serialization.
+    """Block reads of denylisted sensitive columns and whole-row serialization (Gaps 2/3/4).
 
     Independent of the table allowlist. Matches the exact, case-folded column NAME
     (never a substring), so ``password_changed_at`` / ``card_type`` do not over-fire.
 
-    LIMITATION: a bare ``SELECT * FROM users`` (or ``u.*``) names no column,
+    LIMITATION (SQL-2): a bare ``SELECT * FROM users`` (or ``u.*``) names no column,
     so the denylist cannot see whether ``users`` actually has ``password``/``ssn``.
     With ``allowed_tables=None`` (no catalog of table -> columns) we therefore CANNOT
     prove a ``*`` is safe OR unsafe, and blanket-blocking every ``*`` would destroy
@@ -183,7 +183,7 @@ def check_sensitive_columns(stmt: exp.Expression, policy: GuardPolicy) -> list[V
         )
 
     # Whole-row serialization dumps every column, so we cannot rule out a denylisted
-    # one. Block to_jsonb(t)/row_to_json(t)/to_json(t) and the whole-row
+    # one (Gap 4). Block to_jsonb(t)/row_to_json(t)/to_json(t) and the whole-row
     # aggregates json_agg(t)/jsonb_agg(t)/array_agg(t) whose argument is a real-table
     # reference while a sensitive-column denylist is active.
     real_names: set[str] = set()
@@ -246,7 +246,7 @@ def check_sensitive_columns(stmt: exp.Expression, policy: GuardPolicy) -> list[V
                     )
                 )
 
-    # JSON-extract by LITERAL key. A sensitive value can
+    # JSON-extract by LITERAL key (Gap: SQL-2 jsonb extract). A sensitive value can
     # hide inside a jsonb/json column and be pulled out by a constant key:
     #   data ->> 'password'          json_extract_path_text(data, 'a', 'password')
     #   data #>> '{a,password}'      jsonb_extract_path_text(data, 'password')
@@ -361,7 +361,13 @@ def _columns_with_physical_scope(stmt: exp.Expression) -> dict[int, bool]:
         for scope in root.traverse():
             has_phys = any(isinstance(s, exp.Table) for s in scope.sources.values())
             for col in scope.columns:
-                out[id(col)] = has_phys
+                # OR-accumulate: the SAME column node can be visited by several
+                # scopes (e.g. a sensitive column inside an inner scalar subquery
+                # whose FROM-less OUTER scope is visited last). Overwriting would let
+                # the phys=False outer scope CLOBBER the inner phys=True attribution
+                # and silently un-block a real sensitive read. Once ANY scope sees a
+                # physical-table source for the node, that sticks (fail-closed).
+                out[id(col)] = out.get(id(col), False) or has_phys
     except Exception:
         return {}
     return out

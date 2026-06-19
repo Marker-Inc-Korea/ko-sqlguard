@@ -34,6 +34,15 @@ DEFAULT_BLOCKED_FUNCTIONS: frozenset[str] = frozenset(
         "pg_sleep",
         "pg_sleep_for",
         "pg_sleep_until",
+        # Cross-dialect time-based blind-SQLi delay primitives. PostgreSQL has no
+        # sleep()/benchmark()/waitfor, but real-world injection payloads (and the
+        # external SQLi corpora) carry the MySQL/MSSQL spellings verbatim; they
+        # parse cleanly here as ordinary function calls, so block them by name as
+        # the dialect-agnostic counterpart to pg_sleep. No benign analytics read
+        # calls these (verified zero FP on the external benign set).
+        "sleep",        # MySQL time-based blind: AND sleep(5)=0
+        "benchmark",    # MySQL CPU-burn blind: AND benchmark(1e6, md5(now()))
+        "waitfor",      # MSSQL time-based blind: WAITFOR DELAY '0:0:5'
         # --- filesystem access ---
         "pg_read_file",
         "pg_read_binary_file",
@@ -238,6 +247,42 @@ DEFAULT_BLOCKED_FUNCTIONS: frozenset[str] = frozenset(
         "pg_log_backend_memory_contexts",
         "pg_ls_logicalmapdir",
         "pg_ls_logicalsnapdir",
+        # --- identity / version / schema / txid reconnaissance ---
+        # No-arg/idempotent built-ins that fingerprint the server, current
+        # principal, current database/schema, or transaction-id state. They take
+        # NO table reference, so the table allowlist never engages and this
+        # denylist (plus the bare-keyword Column scan in checks/functions.py for
+        # the spellings that parse without parens) is the only defense. Matched on
+        # the AST function name, case-folded. Note: `version()` parses to the typed
+        # CurrentVersion node whose sql_name() is "current_version", so BOTH
+        # spellings are listed. now()/current_date/current_timestamp/pg_typeof
+        # resolve to distinct names and are unaffected (verified — no FP).
+        "current_database",
+        "current_catalog",
+        "current_schema",
+        "current_schemas",
+        "current_user",
+        "session_user",
+        "current_role",
+        "user",
+        "version",
+        "current_version",
+        "current_query",
+        "txid_current",
+        "txid_current_if_assigned",
+        "txid_current_snapshot",
+        "txid_status",
+        "txid_snapshot_xmin",
+        "txid_snapshot_xmax",
+        "txid_snapshot_xip",
+        "txid_visible_in_snapshot",
+        "pg_current_xact_id",
+        "pg_current_xact_id_if_assigned",
+        "pg_current_snapshot",
+        "pg_snapshot_xmin",
+        "pg_snapshot_xmax",
+        "pg_snapshot_xip",
+        "pg_visible_in_snapshot",
         # --- configuration read/write (info disclosure / state change) ---
         "set_config",
         "current_setting",
@@ -352,6 +397,30 @@ DEFAULT_BLOCKED_CATALOG_TABLES: frozenset[str] = frozenset(
         # large-object byte store (read raw object bytes / enumerate object OIDs)
         "pg_largeobject",
         "pg_largeobject_metadata",
+        # --- cross-dialect system catalogs (Oracle / MSSQL / MySQL) ---
+        # PostgreSQL is the target, but real-world UNION-based recon payloads (and the
+        # external SQLi corpora) lift the version/schema views from OTHER engines
+        # verbatim: `UNION SELECT banner FROM v$version`, `UNION SELECT name FROM
+        # sysobjects`, `FROM dual`, `FROM all_tables`. They parse here as ordinary
+        # bare tables and would otherwise slip the pg_*-only catalog gate. No PG app
+        # table legitimately carries these reserved names (verified zero hits in the
+        # external benign set), so block them as the cross-engine counterpart to the
+        # pg_catalog denylist. (`v$...` is also covered by the v$ prefix gate below.)
+        "v$version",        # Oracle version banner (classic UNION recon target)
+        "v$session",        # Oracle live sessions
+        "v$instance",       # Oracle instance info
+        "v$database",       # Oracle database info
+        "v$parameter",      # Oracle server parameters
+        "dual",             # Oracle dummy table — recon scaffolding for UNION/subselect
+        "all_tables",       # Oracle schema enumeration
+        "user_tables",      # Oracle schema enumeration (current user)
+        "all_tab_columns",  # Oracle column enumeration
+        "all_users",        # Oracle user enumeration
+        "sysobjects",       # MSSQL object catalog (UNION recon target)
+        "syscolumns",       # MSSQL column catalog
+        "sysusers",         # MSSQL user catalog
+        "sysdatabases",     # MSSQL database catalog
+        "systables",        # generic/DB2 table catalog
     }
 )
 
@@ -363,7 +432,7 @@ DEFAULT_BLOCKED_CATALOG_TABLES: frozenset[str] = frozenset(
 # version-specific view. Schema-qualified user tables in a NON-catalog schema
 # (``app.pg_foo``) are unaffected — the catalog check only applies the prefix when the
 # reference is unqualified or already in a catalog schema.
-SYSTEM_CATALOG_NAME_PREFIXES: tuple[str, ...] = ("pg_",)
+SYSTEM_CATALOG_NAME_PREFIXES: tuple[str, ...] = ("pg_", "v$", "v_$")
 
 # Reserved prefixes for built-in FUNCTION names. PostgreSQL reserves ``pg_`` for
 # system objects, so any function named ``pg_*`` is a built-in introspection /
@@ -487,6 +556,12 @@ class GuardPolicy(BaseModel):
     max_limit: int | None = 10000
     block_cartesian: bool = True
     block_tautology: bool = True
+    # Block inferential / UNION-based SQLi probes (checks/inference.py): an
+    # uncorrelated scalar subquery compared to a constant or a constant-truth
+    # EXISTS in a row filter (blind-SQLi oracle), and a set-operation arm that
+    # projects a bare '*' (whole-row UNION exfiltration). Verified to add zero
+    # false-blocks on benign analytics SQL. Set False to disable.
+    block_inference_probe: bool = True
     blocked_functions: frozenset[str] = DEFAULT_BLOCKED_FUNCTIONS
 
     # pg_*-function prefix gate (fail-closed). When True, ANY function named pg_*

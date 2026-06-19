@@ -120,6 +120,7 @@ class Guard:
             violations += checks.check_require_where(working, policy)
             violations += checks.check_cartesian(working, policy)
             violations += checks.check_tautology(working, policy)
+            violations += checks.check_inference(working, policy)
         except RecursionError:
             # A pathological, deeply-nested AST (e.g. a 1000-deep OR/AND chain
             # crafted to overflow the C stack) must fail CLOSED, never crash the
