@@ -139,12 +139,14 @@ guard = Guard(pol)
 
 ## 검증
 
-- 로컬 테스트: **602 passed, 5 skipped** (테스트 파일 11개, `pytest`)
+- 로컬 테스트: **680 passed, 5 skipped** (테스트 파일 13개, `pytest`)
 - **적대적 입력 회귀 테스트 포함** — 위험 입력 코퍼스(`tests/fixtures/adversarial.sql`)의
   모든 페이로드가 BLOCK 되는지, 그리고 검사 중 **예외를 던지지 않고**(fail-closed, not fail-crash)
   정상 쿼리는 과탐 없이 통과하는지를 회귀로 고정한다.
 - 다루는 회귀 계열: CTE 스코프 우회, 별칭/파생테이블 컬럼 우회, `pg_*` 함수/카탈로그 접두 게이트,
-  `to_reg*()`·`::reg*` 카탈로그 조회, 행 전체 직렬화, json 리터럴 키 추출, tautology/cartesian 우회 등.
+  `to_reg*()`·`::reg*` 카탈로그 조회, 행 전체 직렬화, json 리터럴 키 추출, tautology/cartesian 우회,
+  **추론형(블라인드) SQLi 오라클**(비상관 서브쿼리 vs 상수·상수참 `EXISTS` — `test_adversarial_inference.py`),
+  **identity/version/schema/txid 서버 핑거프린팅 차단**(`test_adversarial_recon_functions.py`) 등.
 
 ```bash
 PYTHONPATH=src python -m pytest -q
@@ -167,7 +169,7 @@ sqlglot 30.x). 추론 모델·네트워크가 없는 **순수 파서/AST 검사*
 | 워밍업 후 지연 (p95) | **약 0.8 ms** | 동일 측정 |
 | 입력별 중앙값 | 정상 **약 0.63 ms** / 악성 **약 0.48 ms** | 각 2,000회 (악성은 위반 발견 시 조기 반환이라 더 빠름) |
 | **처리량**(단일 스레드, 워밍업 후) | **약 1,500 ~ 2,000 calls/sec** | 20,000회 배치 wall-clock (정상 ~1,490 / 악성 ~1,970) |
-| **전체 테스트** | **602 passed, 5 skipped** | `PYTHONPATH=src python -m pytest` |
+| **전체 테스트** | **680 passed, 5 skipped** | `PYTHONPATH=src python -m pytest` |
 
 > 콜드 스타트는 sqlglot 문법의 1회성 지연 컴파일이며 **호출당 비용이 아니다** — 프로세스 기동 시
 > 한 번 `guard.check("SELECT 1")`로 미리 데우면 이후 요청은 전부 워밍업 지연(<1ms)으로 처리된다.
