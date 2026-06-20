@@ -270,7 +270,7 @@ ko-sqlguard 는 한국어 특화가 아니라 **파싱 전용 글로벌 도구**
 
 > gretelai 600건 중 51건은 write/DDL 로, read-only 가드가 마땅히 차단한다(50/51 차단=정상 동작). 따라서 과탐 지표는 **읽기 쿼리 548건 기준 1건(0.18%)**으로 본다.
 
-→ **실제 SQL 인젝션 약 99.8% 차단**(zrmarine 100% · pegasus 99.8%), **정상 읽기 조회 오차단 1% 미만.** 결정론 파서가 커버(recall)와 과탐 양쪽에서 강한 영역.
+→ **실제 SQL 인젝션 약 99.8% 차단**(zrmarine 100% · pegasus 99.8%), **정상 읽기 조회 오차단 1% 미만** → 합산 기준 **precision 99.8% / F1 1.00**(공격 627건 vs 정상 읽기 548건). 결정론 파서가 recall·precision 양쪽에서 강한 영역(언어무관 도구라 base-rate 왜곡도 작다).
 
 **개선 (2026-06).** 외부 벤치마크에서 tautology 게이트를 빠져나가던 **추론형(블라인드) SQLi**를 분석해 전용 탐지기(`checks/inference.py`)를 추가했다 — 비상관 스칼라 서브쿼리 vs 상수(`(SELECT COUNT(*) …) > 1`), 상수참 `EXISTS`, HAVING/JOIN-ON 위치·RHS 표면변형(음수·산술·CAST·NULL·BETWEEN·IN)까지. 개별로는 정상 파싱돼 통과하던 boolean 오라클을 차단하면서, **상관·필터된 정상 분석 쿼리는 그대로 통과**(reads-only 오차단 회귀 없음). 그 결과 합산(중복제거 627건) 차단율이 **기존 공개본 94.3% → 99.8%**(626/627)로 올랐고(잔여 1건은 정규화 후 read-only SELECT로 환원되는 무해 payload), 회귀는 `tests/test_adversarial_inference.py`로 고정했다.
 
