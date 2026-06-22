@@ -276,6 +276,15 @@ ko-sqlguard 는 한국어 특화가 아니라 **파싱 전용 글로벌 도구**
 
 ---
 
+## 알려진 한계 & 잔여 미탐 (red-team)
+
+ko-sqlguard 는 **PostgreSQL 전용**(sqlglot) AST 파서로, 적대적 레드팀에서 **공격 63/63 차단(우회 0)** 으로 세 가드 중 가장 견고했다. 비차단 공격행은 silent PASS 가 아니라 **TRANSFORM(기본 LIMIT 주입)** 이라 강제된 read-only DB 역할에서 무해하다(defense-in-depth).
+
+- **잔여 FP(1건)**: `FROM 테이블 t, generate_series(...)` 처럼 콤마 조인 + 집합반환함수를 쓰는 정상 분석 쿼리를 cartesian 으로 오차단할 수 있다 — `allowed_tables` allowlist 로 튜닝 가능.
+- **범위 밖**: 비-PostgreSQL 방언 고유 구문은 파싱 실패 시 fail-closed BLOCK 으로 처리된다(미탐이 아니라 보수적 차단).
+
+---
+
 ## 라이선스
 
 MIT License — Copyright (c) 2026 modak000. 전문은 [LICENSE](./LICENSE) 참조.
