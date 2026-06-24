@@ -155,6 +155,21 @@ PYTHONPATH=src python -m pytest -q
 > Tier-2 비용 가드의 통합 테스트는 실 PostgreSQL이 있을 때만(`KO_SQLGUARD_TEST_DSN`) 수행되고,
 > 없으면 skip 된다.
 
+### 경쟁군 대비 (vs 베이스라인, 동일 코퍼스)
+
+공개 SQLi 코퍼스(zrmarine + Pegasus77, deduped 2,955 attack) + benign reads-only(gretelai +
+b-mc2, 3,828)에서 동일 채점(`eval/bench_sql_baselines.py`). 베이스라인은 전부 한 축이 무너진다:
+
+| method | dangerous-recall | benign-FPR |
+|---|---:|---:|
+| **ko-sqlguard** (AST 의미 분석) | **99.0%** | **0.55%** |
+| keyword-regex blacklist | 66.3% | 47.3% |
+| bare-sqlglot (statement-type만) | 90.0% | 3.4% |
+
+regex 는 정상 `UNION`/주석/세미콜론을 무차별 차단(FPR 47%)하면서 recall 도 낮고, bare-sqlglot 은
+`SELECT ... OR 1=1` 같은 SELECT 내 tautology 를 못 잡는다. ko-sqlguard 만 **dangerous-recall ×
+benign-FPR frontier 양 축 동시 우위**.
+
 ---
 
 ## 성능 (측정값)
