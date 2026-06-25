@@ -36,7 +36,7 @@ ko-sqlguard는 LLM 서빙 파이프라인에서 **tool SQL 경로**를 담당한
 | 특징 | 내용 |
 |---|---|
 | **결정론(ML 없음)** | 룰·denylist·allowlist·AST 패턴 매칭만 사용. 같은 입력 → 항상 같은 판정. 모델 호출·네트워크·확률 없음 |
-| **파싱만, 실행 안 함** | `sqlglot.parse(read="postgres")`로 AST를 만들고 그 위에서만 검사. `check()`는 DB·LLM·네트워크를 절대 건드리지 않음 |
+| **파싱만, 실행 안 함** | `sqlglot.parse(read="postgres")`로 AST를 만들고 그 위에서만 검사. `check()`는 DB·LLM·네트워크를 절대 건드리지 않음. 다이얼렉트는 `GuardPolicy(dialect=...)`로 설정(MySQL/MSSQL/SQLite); 기본은 postgres-first **fail-closed**(비-postgres 구문은 보통 오생성 SQL → BLOCK 이 올바른 방어, attack recall 보존). 다중 다이얼렉트 입력이 정상이면 `fallback_dialects=(...)`로 opt-in |
 | **fail-closed** | 파싱 실패·빈 입력·미지원 구문·정체불명 노드는 전부 **BLOCK**. 안전을 증명 못 하면 막는다 |
 | **raw 문자열 미신뢰** | 함수/테이블/컬럼을 정규화된 AST 노드 이름으로 매칭 → 주석/대소문자/공백(`DrOp/**/TABLE`)으로 우회 불가 |
 | **한국어 민감정보 인지** | 민감 컬럼 denylist에 `주민`/`주민번호`/`주민등록번호` 등 한국어 키를 그대로 포함 |
@@ -139,7 +139,7 @@ guard = Guard(pol)
 
 ## 검증
 
-- 로컬 테스트: **680 passed, 5 skipped** (테스트 파일 13개, `pytest`)
+- 로컬 테스트: **687 passed, 5 skipped** (테스트 파일 13개, `pytest`)
 - **적대적 입력 회귀 테스트 포함** — 위험 입력 코퍼스(`tests/fixtures/adversarial.sql`)의
   모든 페이로드가 BLOCK 되는지, 그리고 검사 중 **예외를 던지지 않고**(fail-closed, not fail-crash)
   정상 쿼리는 과탐 없이 통과하는지를 회귀로 고정한다.
@@ -184,7 +184,7 @@ sqlglot 30.x). 추론 모델·네트워크가 없는 **순수 파서/AST 검사*
 | 워밍업 후 지연 (p95) | **약 0.8 ms** | 동일 측정 |
 | 입력별 중앙값 | 정상 **약 0.63 ms** / 악성 **약 0.48 ms** | 각 2,000회 (악성은 위반 발견 시 조기 반환이라 더 빠름) |
 | **처리량**(단일 스레드, 워밍업 후) | **약 1,500 ~ 2,000 calls/sec** | 20,000회 배치 wall-clock (정상 ~1,490 / 악성 ~1,970) |
-| **전체 테스트** | **680 passed, 5 skipped** | `PYTHONPATH=src python -m pytest` |
+| **전체 테스트** | **687 passed, 5 skipped** | `PYTHONPATH=src python -m pytest` |
 
 > 콜드 스타트는 sqlglot 문법의 1회성 지연 컴파일이며 **호출당 비용이 아니다** — 프로세스 기동 시
 > 한 번 `guard.check("SELECT 1")`로 미리 데우면 이후 요청은 전부 워밍업 지연(<1ms)으로 처리된다.

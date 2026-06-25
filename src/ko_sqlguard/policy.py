@@ -540,6 +540,16 @@ DEFAULT_SENSITIVE_COLUMNS: frozenset[str] = frozenset(
 class GuardPolicy(BaseModel):
     model_config = ConfigDict(frozen=True)
 
+    # --- parsing dialect ---
+    # Primary sqlglot dialect — 배포 DB 에 맞춰 설정(MySQL 이면 "mysql", MSSQL 이면 "tsql" 등).
+    # 위험 검사(denylist)는 cross-dialect 라 파싱만 다이얼렉트별이다.
+    dialect: str = "postgres"
+    # 폴백은 **기본 비활성(())**. postgres 배포에서 비-postgres 구문은 보통 잘못 생성된 SQL 이라
+    # fail-closed BLOCK 이 올바른 방어다(폴백을 켜면 그런 악성/오류 구문을 타 다이얼렉트로 파싱해
+    # 통과시킬 수 있어 attack recall 이 떨어짐). 다중 다이얼렉트 입력이 정상인 환경에서만 명시적으로
+    # 켠다: ``GuardPolicy(fallback_dialects=("mysql","tsql","sqlite"))``.
+    fallback_dialects: tuple[str, ...] = ()
+
     read_only: bool = True
     allow_insert: bool = False
     allow_update: bool = False

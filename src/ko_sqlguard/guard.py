@@ -35,6 +35,23 @@ def _real_statements(parsed: Iterable[Any]) -> list[exp.Expression]:
     return [s for s in parsed if s is not None and not isinstance(s, exp.Semicolon)]
 
 
+def _parse_with_fallback(sql: str, policy: GuardPolicy) -> tuple[list[Any] | None, str | None]:
+    """policy.dialect 먼저, 실패 시 fallback_dialects 순차 재시도.
+
+    반환: (parsed, 성공 dialect) 또는 (None, None). postgres 가 먼저 성공하면 기존 동작과
+    동일(폴백 미발동) — 즉 기존 회귀 없음. 타 다이얼렉트 전용 구문만 폴백으로 파싱된다.
+    위험 검사(denylist)는 cross-dialect 라 어느 다이얼렉트로 파싱되든 그대로 적용된다.
+    """
+    for dialect in (policy.dialect, *policy.fallback_dialects):
+        try:
+            return sqlglot.parse(sql, read=dialect), dialect
+        except (ParseError, TokenError):
+            continue
+        except Exception:  # noqa: BLE001 - defensive: 어떤 파서 예외도 다음 다이얼렉트로
+            continue
+    return None, None
+
+
 class Guard:
     """Reusable guard bound to a policy. Stateless across check() calls."""
 
@@ -57,26 +74,17 @@ class Guard:
                 ),
             )
 
-        # 1) Parse once. Any failure is a hard block (we cannot prove safety).
-        try:
-            parsed = sqlglot.parse(sql, read=_DIALECT)
-        except (ParseError, TokenError) as exc:
+        # 1) Parse with dialect fallback. 모든 다이얼렉트에서 실패하면 hard block(안전 증명 불가).
+        parsed, parse_dialect = _parse_with_fallback(sql, policy)
+        if parsed is None:
+            tried = ", ".join((policy.dialect, *policy.fallback_dialects))
             return _block(
                 original,
                 Violation(
                     code="parse_error",
                     severity=Severity.CRITICAL,
-                    reason=f"could not parse SQL: {type(exc).__name__}",
-                    fix="Send a single, well-formed PostgreSQL statement.",
-                ),
-            )
-        except Exception as exc:  # defensive: never crash the hot path
-            return _block(
-                original,
-                Violation(
-                    code="parse_error",
-                    severity=Severity.CRITICAL,
-                    reason=f"unexpected parser error: {type(exc).__name__}",
+                    reason=f"could not parse SQL in any dialect ({tried})",
+                    fix="Send a single, well-formed SQL statement.",
                 ),
             )
 
@@ -165,7 +173,7 @@ class Guard:
 
         if did_transform:
             try:
-                rendered = transformed.sql(dialect=_DIALECT)
+                rendered = transformed.sql(dialect=parse_dialect or _DIALECT)
             except Exception:
                 rendered = original
             return GuardResult(
