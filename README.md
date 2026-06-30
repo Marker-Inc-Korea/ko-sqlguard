@@ -55,8 +55,8 @@ ko-sqlguard는 LLM 서빙 파이프라인에서 **tool SQL 경로**를 담당한
 | `check_statement_type` | `statement_type` | 읽기 외 구문(INSERT/UPDATE/DELETE/DDL/MERGE/COPY/SET 등), 권한 없는 MERGE·`ON CONFLICT DO UPDATE` 에스컬레이션 |
 | `check_statement_type` | `select_into` | `SELECT ... INTO`(읽기로 위장한 테이블 생성) |
 | `check_statement_type` | `locking_read` | `FOR UPDATE`/`FOR SHARE`(행 잠금을 잡는 비순수 읽기), 괄호 래핑 우회 포함 |
-| `check_functions` | `blocked_function` | 위험 서버사이드 함수 denylist + `pg_*` 접두 게이트(미열거 함수까지 fail-closed) + `::reg*` 캐스트(카탈로그 객체 조회) |
-| `check_catalog` | `system_catalog` | `pg_catalog.*`/`information_schema.*`, 자격증명·역할·설정 뷰, `pg_*` 접두 카탈로그/통계 정찰 |
+| `check_functions` | `blocked_function` | 위험 서버사이드 함수 denylist + `pg_*` 접두 게이트(미열거 함수까지 fail-closed) + `::reg*` 캐스트(카탈로그 객체 조회) + **cross-dialect 파일/서버 접근**(MySQL `load_file`, MSSQL `OPENQUERY`/`OPENROWSET`/`OPENDATASOURCE`) |
+| `check_catalog` | `system_catalog` | `pg_catalog.*`/`information_schema.*`, 자격증명·역할·설정 뷰, `pg_*` 접두 카탈로그/통계 정찰 + **cross-engine 카탈로그**(Oracle `v$`/`dual`/`all_tables`, MSSQL `sysobjects`, **MySQL `mysql.*`(자격증명 `mysql.user`)·`performance_schema.*`**) |
 | `check_sensitive_columns` | `sensitive_column` | 민감 컬럼명(정확 일치, 한국어 포함), 행 전체 직렬화(`to_jsonb`/`row_to_json`/`*_agg`), json/jsonb 리터럴 키 추출(`data ->> 'password'`) |
 | `check_tables` | `table_not_allowed` | allowlist 밖 테이블(스코프 인지 — CTE 그림자 우회 차단) |
 | `check_columns` | `column_not_allowed` | 컬럼 allowlist 위반, 제약 테이블의 `*`/`t.*`, 별칭·파생테이블·USING 우회, 모호한 비한정 컬럼 |
@@ -139,7 +139,7 @@ guard = Guard(pol)
 
 ## 검증
 
-- 로컬 테스트: **687 passed, 5 skipped** (테스트 파일 13개, `pytest`)
+- 로컬 테스트: **699 passed, 5 skipped** (테스트 파일 14개, `pytest`)
 - **적대적 입력 회귀 테스트 포함** — 위험 입력 코퍼스(`tests/fixtures/adversarial.sql`)의
   모든 페이로드가 BLOCK 되는지, 그리고 검사 중 **예외를 던지지 않고**(fail-closed, not fail-crash)
   정상 쿼리는 과탐 없이 통과하는지를 회귀로 고정한다.
@@ -184,7 +184,7 @@ sqlglot 30.x). 추론 모델·네트워크가 없는 **순수 파서/AST 검사*
 | 워밍업 후 지연 (p95) | **약 0.8 ms** | 동일 측정 |
 | 입력별 중앙값 | 정상 **약 0.63 ms** / 악성 **약 0.48 ms** | 각 2,000회 (악성은 위반 발견 시 조기 반환이라 더 빠름) |
 | **처리량**(단일 스레드, 워밍업 후) | **약 1,500 ~ 2,000 calls/sec** | 20,000회 배치 wall-clock (정상 ~1,490 / 악성 ~1,970) |
-| **전체 테스트** | **687 passed, 5 skipped** | `PYTHONPATH=src python -m pytest` |
+| **전체 테스트** | **699 passed, 5 skipped** | `PYTHONPATH=src python -m pytest` |
 
 > 콜드 스타트는 sqlglot 문법의 1회성 지연 컴파일이며 **호출당 비용이 아니다** — 프로세스 기동 시
 > 한 번 `guard.check("SELECT 1")`로 미리 데우면 이후 요청은 전부 워밍업 지연(<1ms)으로 처리된다.

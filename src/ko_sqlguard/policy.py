@@ -83,6 +83,15 @@ DEFAULT_BLOCKED_FUNCTIONS: frozenset[str] = frozenset(
         "dblink_get_result",
         "inet_server_addr",
         "inet_server_port",
+        # Cross-dialect filesystem / cross-server primitives. PostgreSQL is the target,
+        # but real-world SQLi payloads (and the external corpora) carry the MySQL/MSSQL
+        # spellings verbatim and they parse here as ordinary function calls — block them
+        # by name as the dialect-agnostic counterpart to pg_read_file / dblink. No benign
+        # analytics read calls these.
+        "load_file",          # MySQL: read a server file  (counterpart to pg_read_file)
+        "openquery",          # MSSQL: run a query on a linked server (counterpart to dblink)
+        "opendatasource",     # MSSQL: ad-hoc connect to an external data source
+        "openrowset",         # MSSQL: ad-hoc remote/file rowset (also reads files)
         # --- admin / replication / backup / process control ---
         "pg_terminate_backend",
         "pg_cancel_backend",
@@ -325,7 +334,15 @@ DEFAULT_BLOCKED_FUNCTIONS: frozenset[str] = frozenset(
 #   * bare catalog VIEWS that live in pg_catalog but are usually referenced
 #     unqualified (e.g. `FROM pg_authid`, `FROM pg_shadow`). These are the
 #     high-value credential/role/config relations.
-SYSTEM_CATALOG_SCHEMAS: frozenset[str] = frozenset({"pg_catalog", "information_schema"})
+# pg_catalog/information_schema (PostgreSQL/SQL-standard) + cross-dialect metadata schemas.
+# MySQL reserves the `mysql` (system tables incl. `mysql.user` credential store) and
+# `performance_schema` schema names; no application uses them, so blocking the schema is
+# the FP-safe counterpart to pg_catalog.* and catches `FROM mysql.user` UNION recon on a
+# MySQL backend / fallback. (`sys` is intentionally NOT listed — too short / app-collision
+# risk; MySQL/MSSQL `sys.*` recon is left as a documented gap rather than risk benign FP.)
+SYSTEM_CATALOG_SCHEMAS: frozenset[str] = frozenset(
+    {"pg_catalog", "information_schema", "mysql", "performance_schema"}
+)
 
 DEFAULT_BLOCKED_CATALOG_TABLES: frozenset[str] = frozenset(
     {
@@ -476,6 +493,7 @@ DEFAULT_SENSITIVE_COLUMNS: frozenset[str] = frozenset(
         "password_hash",
         "passwordhash",
         "pwd",
+        "authentication_string",  # MySQL: password hash column in mysql.user
         # --- auth tokens / session secrets ---
         "auth_token",
         "session_token",
