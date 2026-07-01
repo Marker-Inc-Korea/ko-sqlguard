@@ -61,8 +61,9 @@ ko-sqlguard는 LLM 서빙 파이프라인에서 **tool SQL 경로**를 담당한
 | `check_tables` | `table_not_allowed` | allowlist 밖 테이블(스코프 인지 — CTE 그림자 우회 차단) |
 | `check_columns` | `column_not_allowed` | 컬럼 allowlist 위반, 제약 테이블의 `*`/`t.*`, 별칭·파생테이블·USING 우회, 모호한 비한정 컬럼 |
 | `check_require_where` | `missing_where` | WHERE 없는 UPDATE/DELETE(전 행 변경 방지) |
-| `check_cartesian` | `cartesian` | 명시적 CROSS JOIN, 연결 끊긴 관계 그래프(부분 링크 우회 포함) |
+| `check_cartesian` | `cartesian` | 연결 끊긴 관계 그래프(부분 링크 우회 포함). CROSS JOIN도 연결성으로 판정 — `a CROSS JOIN b WHERE a.id=b.id`(제약된 곱)는 통과, 미제약 CROSS/comma 곱은 차단 |
 | `check_tautology` | `tautology` | 상수-참 술어(`OR 1=1`, `id=id`, `x LIKE '%'`, null-complement OR 등) |
+| `check_inference` | `inference_probe` | 블라인드 SQLi 오라클 — 비상관 스칼라 서브쿼리 vs 상수, 상수참 `EXISTS`, **문장 어디서든 상수-상수 비교**(`CASE WHEN 1=1`) |
 | `apply_limit` (변환) | `limit_injected` / `limit_capped` | 무제한 읽기에 기본 LIMIT 주입, 과도/비리터럴 LIMIT을 max로 캡 |
 | `explain_cost_guard` (Tier-2) | `cost_exceeded` / `rows_exceeded` / `explain_failed` | (옵션) `EXPLAIN`(절대 `ANALYZE` 아님) 플래너 추정 비용/행수 초과 차단 |
 
@@ -139,13 +140,14 @@ guard = Guard(pol)
 
 ## 검증
 
-- 로컬 테스트: **699 passed, 5 skipped** (테스트 파일 14개, `pytest`)
+- 로컬 테스트: **712 passed, 5 skipped** (테스트 파일 15개, `pytest`)
 - **적대적 입력 회귀 테스트 포함** — 위험 입력 코퍼스(`tests/fixtures/adversarial.sql`)의
   모든 페이로드가 BLOCK 되는지, 그리고 검사 중 **예외를 던지지 않고**(fail-closed, not fail-crash)
   정상 쿼리는 과탐 없이 통과하는지를 회귀로 고정한다.
 - 다루는 회귀 계열: CTE 스코프 우회, 별칭/파생테이블 컬럼 우회, `pg_*` 함수/카탈로그 접두 게이트,
   `to_reg*()`·`::reg*` 카탈로그 조회, 행 전체 직렬화, json 리터럴 키 추출, tautology/cartesian 우회,
-  **추론형(블라인드) SQLi 오라클**(비상관 서브쿼리 vs 상수·상수참 `EXISTS` — `test_adversarial_inference.py`),
+  **추론형(블라인드) SQLi 오라클**(비상관 서브쿼리 vs 상수·상수참 `EXISTS`·**CASE 내 상수-상수 비교
+  `CASE WHEN 1=1`** — `test_adversarial_inference.py`),
   **identity/version/schema/txid 서버 핑거프린팅 차단**(`test_adversarial_recon_functions.py`) 등.
 
 ```bash
@@ -158,12 +160,12 @@ PYTHONPATH=src python -m pytest -q
 ### 경쟁군 대비 (vs 베이스라인, 동일 코퍼스)
 
 공개 SQLi 코퍼스(zrmarine + Pegasus77, deduped 2,955 attack) + benign reads-only(gretelai +
-b-mc2, 3,828)에서 동일 채점(`eval/bench_sql_baselines.py`). 베이스라인은 전부 한 축이 무너진다:
+b-mc2, 3,819)에서 동일 채점(`eval/bench_sql_baselines.py`). 베이스라인은 전부 한 축이 무너진다:
 
 | method | dangerous-recall | benign-FPR |
 |---|---:|---:|
-| **ko-sqlguard** (AST 의미 분석) | **99.0%** | **0.55%** |
-| keyword-regex blacklist | 66.3% | 47.3% |
+| **ko-sqlguard** (AST 의미 분석) | **99.7%** | **0.29%** |
+| keyword-regex blacklist | 66.3% | 47.2% |
 | bare-sqlglot (statement-type만) | 90.0% | 3.4% |
 
 regex 는 정상 `UNION`/주석/세미콜론을 무차별 차단(FPR 47%)하면서 recall 도 낮고, bare-sqlglot 은
@@ -184,7 +186,7 @@ sqlglot 30.x). 추론 모델·네트워크가 없는 **순수 파서/AST 검사*
 | 워밍업 후 지연 (p95) | **약 0.8 ms** | 동일 측정 |
 | 입력별 중앙값 | 정상 **약 0.63 ms** / 악성 **약 0.48 ms** | 각 2,000회 (악성은 위반 발견 시 조기 반환이라 더 빠름) |
 | **처리량**(단일 스레드, 워밍업 후) | **약 1,500 ~ 2,000 calls/sec** | 20,000회 배치 wall-clock (정상 ~1,490 / 악성 ~1,970) |
-| **전체 테스트** | **699 passed, 5 skipped** | `PYTHONPATH=src python -m pytest` |
+| **전체 테스트** | **712 passed, 5 skipped** | `PYTHONPATH=src python -m pytest` |
 
 > 콜드 스타트는 sqlglot 문법의 1회성 지연 컴파일이며 **호출당 비용이 아니다** — 프로세스 기동 시
 > 한 번 `guard.check("SELECT 1")`로 미리 데우면 이후 요청은 전부 워밍업 지연(<1ms)으로 처리된다.
@@ -288,6 +290,8 @@ ko-sqlguard 는 한국어 특화가 아니라 **파싱 전용 글로벌 도구**
 → **실제 SQL 인젝션 약 99.8% 차단**(zrmarine 100% · pegasus 99.8%), **정상 읽기 조회 오차단 1% 미만** → 합산 기준 **precision 99.8% / F1 1.00**(공격 627건 vs 정상 읽기 548건). 결정론 파서가 recall·precision 양쪽에서 강한 영역(언어무관 도구라 base-rate 왜곡도 작다).
 
 **개선 (2026-06).** 외부 벤치마크에서 tautology 게이트를 빠져나가던 **추론형(블라인드) SQLi**를 분석해 전용 탐지기(`checks/inference.py`)를 추가했다 — 비상관 스칼라 서브쿼리 vs 상수(`(SELECT COUNT(*) …) > 1`), 상수참 `EXISTS`, HAVING/JOIN-ON 위치·RHS 표면변형(음수·산술·CAST·NULL·BETWEEN·IN)까지. 개별로는 정상 파싱돼 통과하던 boolean 오라클을 차단하면서, **상관·필터된 정상 분석 쿼리는 그대로 통과**(reads-only 오차단 회귀 없음). 그 결과 합산(중복제거 627건) 차단율이 **기존 공개본 94.3% → 99.8%**(626/627)로 올랐고(잔여 1건은 정규화 후 read-only SELECT로 환원되는 무해 payload), 회귀는 `tests/test_adversarial_inference.py`로 고정했다.
+
+**개선 (2026-07).** 남은 미탐/오탐을 좁혔다: ⓐ **CASE-오라클** — `SELECT CASE WHEN 1=1 THEN … END`처럼 WHERE 술어 밖(projection·CASE·함수 인자)에 숨은 상수-상수 비교를 문장 전체 스캔으로 차단(비상관 서브쿼리 오라클과 동일한 블라인드 SQLi인데 predicate-root 순회를 벗어나 통과하던 계열), ⓑ **제약된 CROSS JOIN 완화** — `a CROSS JOIN b WHERE a.id=b.id`(inner join과 동일)를 무조건 차단 대신 연결성 그래프로 판정해 정상 통과(미제약 CROSS는 차단 유지), ⓒ **eval 정직화** — `external_sqli.py`의 read-only 판정을 파싱 기반으로 강화해 multi-statement/CTE-write를 benign-read 분모에서 제외. 그 결과 외부 코퍼스 **ATTACK recall 99.05→99.73%**(miss 28→8, 신규 오탐 0/3819), **benign-FPR 0.55→0.29%**. 회귀는 `tests/test_case_oracle_and_cross.py`.
 
 ---
 

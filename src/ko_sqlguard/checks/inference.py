@@ -220,6 +220,27 @@ def _constant_exists_probe(root: exp.Expression) -> bool:
     return False
 
 
+def _literal_comparison_probe(stmt: exp.Expression) -> bool:
+    """A comparison whose BOTH operands are compile-time constants (lit op lit),
+    ANYWHERE in the statement — projection, CASE-WHEN, function args — not only in a
+    WHERE/HAVING/JOIN predicate.
+
+    ``SELECT CASE WHEN 1=1 THEN a ELSE 1/0 END`` (and ``... WHEN 'a'='b' ...``) is the
+    classic blind-SQLi CASE oracle: a constant-vs-constant test injected to leak one bit
+    via branch side effects, sitting OUTSIDE the predicate roots that tautology/probe
+    checks scan. Benign analytics compare column-vs-literal or column-vs-column, never
+    literal-vs-literal; the one degenerate benign (``WHERE 1=1``) is already caught by
+    the tautology gate. Whole-statement scope is required — a projection-only scan misses
+    the ``generate_series(...) ... CASE WHEN 1=1`` arm. Reuses ``_is_constant_expr`` so
+    negated/cast/arithmetic constants (``2-1=1``) are covered. Verified zero false-blocks
+    on the external benign corpora.
+    """
+    for cmp in stmt.find_all(*_PROBE_CMP):
+        if _is_constant_expr(cmp.this) and _is_constant_expr(cmp.expression):
+            return True
+    return False
+
+
 def _predicate_roots(stmt: exp.Expression) -> list[exp.Expression]:
     """WHERE / HAVING predicate bodies and JOIN..ON predicates.
 
@@ -244,6 +265,19 @@ def _predicate_roots(stmt: exp.Expression) -> list[exp.Expression]:
 def check_inference(stmt: exp.Expression, policy: GuardPolicy) -> list[Violation]:
     if not policy.block_inference_probe:
         return []
+
+    # Whole-statement literal-vs-literal comparison (CASE/projection blind oracle).
+    if _literal_comparison_probe(stmt):
+        return [
+            Violation(
+                code="inference_probe",
+                severity=Severity.MEDIUM,
+                reason="constant-vs-constant comparison (e.g. CASE WHEN 1=1) is a blind-SQLi "
+                "oracle, not a real condition",
+                action="block",
+                fix="Remove the constant comparison; conditions must reference table columns.",
+            )
+        ]
 
     for root in _predicate_roots(stmt):
         if _scalar_subquery_probe(root) or _constant_exists_probe(root):

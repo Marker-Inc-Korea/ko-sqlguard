@@ -99,7 +99,29 @@ def _norm(s: str) -> str:
 
 
 def _is_read(s: str) -> bool:
-    return _norm(s).startswith(("select", "with", "(", "values"))
+    """True only for a SINGLE read-only statement (SELECT/WITH/VALUES).
+
+    Prefix-matching alone counts ``SELECT ...; DROP ...`` (multiple statements) and
+    ``WITH x AS (...) INSERT ...`` (a CTE feeding a write) as reads because they begin
+    with select/with — but those are correctly BLOCKED writes, not read-only benign, so
+    they inflate the reads-only false-block denominator. Parse and exclude them so the
+    reported benign-FPR reflects genuine read-only queries (honest denominator).
+    """
+    if not _norm(s).startswith(("select", "with", "(", "values")):
+        return False
+    try:
+        import sqlglot
+        from sqlglot import exp as _e
+        stmts = [st for st in sqlglot.parse(s) if st is not None]
+    except Exception:
+        return True  # unparseable but read-prefixed: keep prior (conservative) behaviour
+    if len(stmts) != 1:
+        return False  # multiple statements (`SELECT ...; DROP ...`) → not read-only
+    # any write/DDL node anywhere (incl. a CTE body `WITH x AS (...) INSERT ...`) → not read
+    if stmts[0].find(_e.Insert, _e.Update, _e.Delete, _e.Create, _e.Drop,
+                     _e.Alter, _e.Merge, _e.Command):
+        return False
+    return True
 
 
 def main() -> None:

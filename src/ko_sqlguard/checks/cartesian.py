@@ -86,10 +86,13 @@ def check_cartesian(stmt: exp.Expression, policy: GuardPolicy) -> list[Violation
         if not joins:
             continue
 
-        # --- explicit CROSS JOIN (and unconstrained implicit comma join group) ---
-        # First pass: an explicit CROSS JOIN is a cartesian product by definition.
-        flagged = False
-        comma_joins: list[exp.Join] = []
+        # --- unconstrained-product candidates (explicit CROSS + implicit comma) ---
+        # An explicit CROSS JOIN is NOT blocked unconditionally: `a CROSS JOIN b
+        # WHERE a.id = b.id` is constrained (identical to an inner join), so route
+        # CROSS through the SAME connectivity graph as comma joins and flag it below
+        # only if its relations stay in separate components (no cross-table link).
+        # An attack CROSS has no such equality → stays unlinked → still blocked.
+        needs_connectivity = False
         for join in joins:
             # CROSS/JOIN LATERAL (...) is a correlated subquery, never an
             # unconstrained product -> skip.
@@ -99,18 +102,15 @@ def check_cartesian(stmt: exp.Expression, policy: GuardPolicy) -> list[Violation
             side = (join.side or "").upper()
             has_on = join.args.get("on") is not None
             has_using = join.args.get("using") is not None
-            if kind == "CROSS":
-                violations.append(_cartesian_violation())
-                flagged = True
-                break
-            # an implicit comma join carries no kind/side/on/using.
-            if not kind and not side and not has_on and not has_using:
-                comma_joins.append(join)
-        if flagged:
-            continue
+            # explicit CROSS without ON/USING, or an implicit comma join (no
+            # kind/side/on/using): both need a connectivity check.
+            if kind == "CROSS" and not has_on and not has_using:
+                needs_connectivity = True
+            elif not kind and not side and not has_on and not has_using:
+                needs_connectivity = True
 
-        # --- connectivity over the implicit comma-join group --------------------
-        if not comma_joins:
+        # --- connectivity over the unconstrained-product group ------------------
+        if not needs_connectivity:
             continue
 
         from_ = select.args.get("from_")
