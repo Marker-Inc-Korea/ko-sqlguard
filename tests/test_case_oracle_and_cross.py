@@ -63,3 +63,29 @@ CROSS_ATTACK = [
 @pytest.mark.parametrize("q", CROSS_ATTACK, ids=lambda s: s[:34])
 def test_unconstrained_cross_still_blocked(q: str) -> None:
     assert check(q, DEFAULT).verdict is Verdict.BLOCK, q
+
+
+# --- CROSS/comma + OR-loosened / spoofed equality → still BLOCK (near-cartesian) -----
+OR_SPOOF_CARTESIAN = [
+    "SELECT * FROM big1 CROSS JOIN big2 WHERE big1.id=big2.id OR big2.active=1",
+    "SELECT * FROM a, b WHERE a.id=b.id OR b.active=1",
+    "SELECT * FROM a CROSS JOIN b WHERE NOT (a.id=b.id)",
+]
+
+
+@pytest.mark.parametrize("q", OR_SPOOF_CARTESIAN, ids=lambda s: s[:40])
+def test_or_spoofed_equality_still_blocked(q: str) -> None:
+    # only AND-connected equalities constrain the product; an OR/NOT-buried
+    # equality must not mark the CROSS/comma product as constrained.
+    assert check(q, DEFAULT).verdict is Verdict.BLOCK, q
+
+
+AND_CONSTRAINED_OK = [
+    "SELECT * FROM a CROSS JOIN b WHERE a.id=b.id AND a.x > 5",
+    "SELECT * FROM a, b WHERE a.id=b.id AND (b.x=1 OR b.y=2)",
+]
+
+
+@pytest.mark.parametrize("q", AND_CONSTRAINED_OK, ids=lambda s: s[:40])
+def test_and_constrained_not_blocked(q: str) -> None:
+    assert check(q, DEFAULT).verdict is not Verdict.BLOCK, q

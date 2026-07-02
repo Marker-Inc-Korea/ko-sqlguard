@@ -59,17 +59,42 @@ def _relation_label(rel: exp.Expression) -> str | None:
     return name.lower() if name else None
 
 
+def _and_equalities(pred: exp.Expression) -> list[exp.EQ]:
+    """EQ nodes joined to the predicate root through AND (and Paren) ONLY.
+
+    Only an equality that holds for EVERY row constrains a cartesian product. An
+    equality buried under an OR (or NOT) branch does not — rows can satisfy the
+    other branch — so ``a.id=b.id OR b.active=1`` must NOT link a↔b (that would let
+    a near-cartesian through). We therefore descend only AND/Paren from the root and
+    stop at OR/NOT, collecting the top-level conjunct equalities. (Bounded walk.)
+    """
+    out: list[exp.EQ] = []
+    stack = [pred]
+    seen = 0
+    while stack and seen < 10000:
+        n = stack.pop(); seen += 1
+        if isinstance(n, exp.Paren):
+            stack.append(n.this)
+        elif isinstance(n, exp.And):
+            stack.append(n.this); stack.append(n.expression)
+        elif isinstance(n, exp.EQ):
+            out.append(n)
+        # OR / NOT / others → do not descend (their equalities don't hold for all rows)
+    return out
+
+
 def _cross_qualifier_edges(pred: exp.Expression | None, dsu: _DSU) -> None:
-    """Union every pair of DISTINCT table qualifiers compared in an equality.
+    """Union DISTINCT table qualifiers compared in a top-level (AND-connected) equality.
 
     Only equality (a.x = b.y) links relations for join purposes; an inequality or
-    a single-table predicate does not constrain the product. We also union all
-    qualifiers that co-occur in any binary predicate's two column operands, which
-    is sufficient for connectivity.
+    single-table predicate does not constrain the product. Crucially, only equalities
+    that hold for every row (AND-connected to the root, not under an OR/NOT) count —
+    otherwise a spoofed ``a.id=b.id OR b.active=1`` would falsely mark the CROSS as
+    constrained and let a near-cartesian through.
     """
     if pred is None:
         return
-    for eq in pred.find_all(exp.EQ):
+    for eq in _and_equalities(pred):
         lq = eq.this.table if isinstance(eq.this, exp.Column) else None
         rq = eq.expression.table if isinstance(eq.expression, exp.Column) else None
         if lq and rq and lq.lower() != rq.lower():
