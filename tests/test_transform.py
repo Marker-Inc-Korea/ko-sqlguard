@@ -101,7 +101,7 @@ def test_property_passed_queries_are_single_safe_reads() -> None:
         assert len(stmts) == 1, f"{sql!r} -> {r.sql!r}"
         stmt = stmts[0]
         # 2) is a read shape, with no mutating nodes anywhere
-        assert isinstance(stmt, (exp.Query, exp.Values)), f"{r.sql!r} top={type(stmt).__name__}"
+        assert isinstance(stmt, exp.Query | exp.Values), f"{r.sql!r} top={type(stmt).__name__}"
         for bad in (exp.Insert, exp.Update, exp.Delete, exp.Drop, exp.Create,
                     exp.Alter, exp.TruncateTable, exp.Merge, exp.Copy, exp.Command):
             assert not list(stmt.find_all(bad)), f"{r.sql!r} contains {bad.__name__}"

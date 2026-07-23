@@ -21,7 +21,7 @@ from ..result import Severity, Violation
 def _top_selects(stmt: exp.Expression) -> list[exp.Select]:
     if isinstance(stmt, exp.Select):
         return [stmt]
-    if isinstance(stmt, (exp.Union, exp.Intersect, exp.Except)):
+    if isinstance(stmt, exp.Union | exp.Intersect | exp.Except):
         return [s for s in (stmt.this, stmt.expression) if isinstance(s, exp.Select)]
     if isinstance(stmt, exp.Subquery) and isinstance(stmt.this, exp.Select):
         return [stmt.this]
@@ -72,11 +72,13 @@ def _and_equalities(pred: exp.Expression) -> list[exp.EQ]:
     stack = [pred]
     seen = 0
     while stack and seen < 10000:
-        n = stack.pop(); seen += 1
+        n = stack.pop()
+        seen += 1
         if isinstance(n, exp.Paren):
             stack.append(n.this)
         elif isinstance(n, exp.And):
-            stack.append(n.this); stack.append(n.expression)
+            stack.append(n.this)
+            stack.append(n.expression)
         elif isinstance(n, exp.EQ):
             out.append(n)
         # OR / NOT / others → do not descend (their equalities don't hold for all rows)
@@ -129,9 +131,9 @@ def check_cartesian(stmt: exp.Expression, policy: GuardPolicy) -> list[Violation
             has_using = join.args.get("using") is not None
             # explicit CROSS without ON/USING, or an implicit comma join (no
             # kind/side/on/using): both need a connectivity check.
-            if kind == "CROSS" and not has_on and not has_using:
-                needs_connectivity = True
-            elif not kind and not side and not has_on and not has_using:
+            explicit_cross = kind == "CROSS" and not has_on and not has_using
+            implicit_cross = not kind and not side and not has_on and not has_using
+            if explicit_cross or implicit_cross:
                 needs_connectivity = True
 
         # --- connectivity over the unconstrained-product group ------------------
@@ -169,7 +171,7 @@ def check_cartesian(stmt: exp.Expression, policy: GuardPolicy) -> list[Violation
         # edges: explicit JOIN ON predicates + WHERE equalities.
         for join in joins:
             _cross_qualifier_edges(join.args.get("on"), dsu)
-            for ident in join.args.get("using") or []:
+            for _ident in join.args.get("using") or []:
                 # USING links the join relation to a prior one; conservatively union
                 # the join relation with the base relation's component.
                 lbl = _relation_label(join.this)

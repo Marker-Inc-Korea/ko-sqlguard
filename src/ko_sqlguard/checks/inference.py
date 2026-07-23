@@ -59,7 +59,7 @@ from ..result import Severity, Violation
 
 # Comparison operators whose <scalar-subquery> vs <literal> form is an inference
 # oracle (each returns one bit / one value about hidden data).
-_PROBE_CMP: tuple[type, ...] = (
+_PROBE_CMP: tuple[type[exp.Expression], ...] = (
     exp.EQ, exp.NEQ, exp.GT, exp.GTE, exp.LT, exp.LTE,
 )
 
@@ -104,13 +104,13 @@ def _is_constant_expr(node: exp.Expression | None, _depth: int = 0) -> bool:
     if node is None or _depth >= 50:
         return False
     node = _unwrap_paren(node)
-    if isinstance(node, (exp.Literal, exp.Null, exp.Boolean)):
+    if isinstance(node, exp.Literal | exp.Null | exp.Boolean):
         return True
     if isinstance(node, exp.Neg):
         return _is_constant_expr(node.this, _depth + 1)
     if isinstance(node, exp.Cast):
         return _is_constant_expr(node.this, _depth + 1)
-    if isinstance(node, (exp.Add, exp.Sub, exp.Mul, exp.Div)):
+    if isinstance(node, exp.Add | exp.Sub | exp.Mul | exp.Div):
         return _is_constant_expr(node.this, _depth + 1) and _is_constant_expr(
             node.expression, _depth + 1
         )

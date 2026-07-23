@@ -11,7 +11,7 @@ def _within_merge(node: exp.Expression) -> bool:
     """A MERGE WHEN action is scoped by the MERGE ON condition, not a WHERE."""
     p = node.parent
     while p is not None:
-        if isinstance(p, (exp.When, exp.Merge)):
+        if isinstance(p, exp.When | exp.Merge):
             return True
         p = p.parent
     return False

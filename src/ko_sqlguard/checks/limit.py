@@ -36,7 +36,7 @@ def apply_limit(
     stmt: exp.Expression, policy: GuardPolicy
 ) -> tuple[exp.Expression, list[Violation]]:
     # Only bound queries that actually read rows from a source.
-    if not isinstance(stmt, (exp.Select, exp.Union, exp.Intersect, exp.Except)):
+    if not isinstance(stmt, exp.Select | exp.Union | exp.Intersect | exp.Except):
         return stmt, []
     if stmt.find(exp.From) is None:
         return stmt, []

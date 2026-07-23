@@ -139,12 +139,13 @@ def check_functions(stmt: exp.Expression, policy: GuardPolicy) -> list[Violation
         # Carve out genuine FTS: the match target resolves through a *_tsquery()
         # builder or an explicit ::tsquery cast. Anything else (bare identifier such
         # as `version`, a literal, …) is the fingerprint operator form.
+        target_type = target.args.get("to") if isinstance(target, exp.Cast) else None
+        target_type_sql = (
+            target_type.sql().lower() if isinstance(target_type, exp.Expression) else ""
+        )
         is_real_fts = (
             isinstance(target, exp.Func) and "tsquery" in (target_sql or "")
-        ) or (
-            isinstance(target, exp.Cast)
-            and "tsquery" in (target.args.get("to").sql().lower() if target.args.get("to") else "")
-        )
+        ) or (isinstance(target, exp.Cast) and "tsquery" in target_type_sql)
         if not is_real_fts:
             flagged.add("@@recon")
             label = (target.name or target_sql) if target is not None else "?"
