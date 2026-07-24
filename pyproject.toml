@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "ko-sqlguard"
-version = "0.2.0rc1"
+version = "0.2.0"
 description = "Deterministic, parse-only guardrails for LLM-generated PostgreSQL queries"
 readme = "README.md"
 requires-python = ">=3.10"
@@ -13,7 +13,7 @@ license-files = ["LICENSE"]
 authors = [{ name = "mk04" }]
 keywords = ["sql", "guardrail", "llm", "postgresql", "security", "sqlglot"]
 classifiers = [
-    "Development Status :: 4 - Beta",
+    "Development Status :: 5 - Production/Stable",
     "Intended Audience :: Developers",
     "Programming Language :: Python :: 3",
     "Topic :: Database",

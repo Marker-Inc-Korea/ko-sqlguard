@@ -9,7 +9,7 @@
 ```bash
 docker build -f ko-sqlguard/Dockerfile \
   --build-arg VCS_REF="$(git rev-parse HEAD)" \
-  -t ko-sqlguard:0.2.0rc1 .
+  -t ko-sqlguard:0.2.0 .
 ```
 
 ## Run
@@ -22,7 +22,7 @@ docker run --rm --read-only --tmpfs /tmp:rw,noexec,nosuid,size=16m \
   -e KO_GUARD_AUDIT_HMAC_KEY="$KO_GUARD_AUDIT_HMAC_KEY" \
   -v "$PWD/deployment/policies/sql-production.json:/run/policy.json:ro" \
   -e KO_GUARD_POLICY_FILE=/run/policy.json \
-  ko-sqlguard:0.2.0rc1
+  ko-sqlguard:0.2.0
 ```
 
 두 secret은 서로 다른 최소 32바이트 값이어야 하며 외부 bind에서는 모두 필수다.
