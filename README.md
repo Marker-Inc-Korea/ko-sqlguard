@@ -304,6 +304,14 @@ ko-sqlguard 는 **PostgreSQL 전용**(sqlglot) AST 파서로, 적대적 레드�
 
 ---
 
+## 운영 배포
+
+explicit table/column allowlist, 인증, 요청 상한, 정책 digest, raw 비저장 감사, readiness
+canary와 비루트 컨테이너 사용법은 [`DEPLOYMENT.md`](./DEPLOYMENT.md)에 정리했다. 서비스
+배포는 최소 권한 DB role과 statement timeout을 대체하지 않는다.
+
+---
+
 ## 라이선스
 
 MIT License — Copyright (c) 2026 modak000. 전문은 [LICENSE](./LICENSE) 참조.

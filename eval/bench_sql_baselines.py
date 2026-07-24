@@ -14,13 +14,15 @@ import re
 import sys
 from pathlib import Path
 
-KSG = "/data1/mk04/eval_external/modak_pub/ko-sqlguard"
+from _paths import PACKAGE_ROOT, eval_path
+
+KSG = str(PACKAGE_ROOT)
 sys.path.insert(0, f"{KSG}/eval")
 sys.path.insert(0, f"{KSG}/src")
 import external_sqli as E  # fetch, _norm, _is_read, blocks(=ko-sqlguard)
 import sqlglot
 
-OUT = "/data1/mk04/eval_external/bench_sql_report.json"
+OUT = eval_path("bench_sql_report.json")
 
 _DANGER = re.compile(
     r"\b(drop|delete|truncate|alter|update|insert|grant|revoke|exec|execute|union|"
