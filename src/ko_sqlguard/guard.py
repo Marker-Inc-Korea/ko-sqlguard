@@ -174,8 +174,21 @@ class Guard:
         if did_transform:
             try:
                 rendered = transformed.sql(dialect=parse_dialect or _DIALECT)
-            except Exception:
-                rendered = original
+            except Exception as exc:
+                return GuardResult(
+                    verdict=Verdict.BLOCK,
+                    sql=None,
+                    original_sql=original,
+                    violations=(
+                        *violations,
+                        Violation(
+                            code="transform_error",
+                            severity=Severity.CRITICAL,
+                            reason=f"could not render transformed SQL: {type(exc).__name__}",
+                            fix="Reject the query and inspect the parser/dialect configuration.",
+                        ),
+                    ),
+                )
             return GuardResult(
                 verdict=Verdict.TRANSFORM,
                 sql=rendered,

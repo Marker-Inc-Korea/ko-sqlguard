@@ -1,10 +1,12 @@
 """LIMIT injection / capping transforms, audit-trail preservation, property test."""
 from __future__ import annotations
 
+import pytest
 import sqlglot
 from sqlglot import exp
 
-from ko_sqlguard import GuardPolicy, Verdict, check
+from ko_sqlguard import GuardPolicy, Severity, Verdict, Violation, check
+from ko_sqlguard import guard as guard_module
 
 P = GuardPolicy(allowed_tables=None, default_limit=1000, max_limit=10000)
 
@@ -65,6 +67,29 @@ def test_transform_is_low_severity_only() -> None:
     r = check("SELECT * FROM orders", policy=P)
     limit_v = [v for v in r.violations if v.code == "limit_injected"][0]
     assert limit_v.action == "transform"
+
+
+def test_transform_render_failure_blocks(monkeypatch: pytest.MonkeyPatch) -> None:
+    class Unrenderable:
+        def sql(self, *, dialect: str) -> str:
+            raise RuntimeError(f"cannot render {dialect}")
+
+    def fail_render(*_args: object) -> tuple[Unrenderable, list[Violation]]:
+        return Unrenderable(), [
+            Violation(
+                code="limit_injected",
+                severity=Severity.LOW,
+                reason="unit-test transform",
+                action="transform",
+            )
+        ]
+
+    monkeypatch.setattr(guard_module.checks, "apply_limit", fail_render)
+    result = check("SELECT * FROM orders", policy=P)
+
+    assert result.verdict is Verdict.BLOCK
+    assert result.sql is None
+    assert any(v.code == "transform_error" for v in result.violations)
 
 
 def test_limit_injected_on_union() -> None:
