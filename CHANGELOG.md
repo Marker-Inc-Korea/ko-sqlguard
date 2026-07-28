@@ -4,11 +4,15 @@
 
 ## Unreleased
 
+## 1.0.0 - 2026-07-28
+
 ### Changed
 
 - 모노레포의 `ko-sqlguard/` 이력을 보존해 독립 저장소로 전환했습니다.
-- 패키지 성숙도 표기를 실제 릴리스 증거에 맞춰 Beta로 조정했습니다.
+- 패키지 성숙도를 Production/Stable로 승격하고 독립 CI와 통합 릴리스 증거에 연결했습니다.
 - 독립 CI, 배포 경계, 보안 신고 및 기여 절차를 추가했습니다.
+- parser 전 문자·UTF-8 바이트 상한, 원문 없는 telemetry, 명시적 운영 allowlist 검증을
+  추가했습니다.
 
 ### Removed
 

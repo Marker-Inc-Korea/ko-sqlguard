@@ -38,6 +38,17 @@ class Violation(BaseModel):
     fix: str | None = None
 
 
+class GuardTelemetry(BaseModel):
+    """Telemetry safe to forward to logs or metrics without SQL content."""
+
+    model_config = ConfigDict(frozen=True)
+
+    verdict: Verdict
+    forward_safe: bool
+    violation_codes: tuple[str, ...] = ()
+    highest_severity: Severity | None = None
+
+
 class GuardResult(BaseModel):
     model_config = ConfigDict(frozen=True)
 
@@ -49,6 +60,22 @@ class GuardResult(BaseModel):
     @property
     def ok(self) -> bool:
         return self.verdict is not Verdict.BLOCK
+
+    @property
+    def forward_safe(self) -> bool:
+        """Whether ``sql`` is present and may be forwarded to the database."""
+        return self.verdict in (Verdict.PASS, Verdict.TRANSFORM) and self.sql is not None
+
+    def to_telemetry(self) -> GuardTelemetry:
+        """Return a SQL- and reason-free representation suitable for telemetry."""
+        return GuardTelemetry(
+            verdict=self.verdict,
+            forward_safe=self.forward_safe,
+            violation_codes=tuple(violation.code for violation in self.violations),
+            highest_severity=max(
+                (violation.severity for violation in self.violations), default=None
+            ),
+        )
 
 
 class GuardBlocked(Exception):

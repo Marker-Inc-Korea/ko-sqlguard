@@ -9,7 +9,7 @@ def test_standalone_repository_contract() -> None:
     pyproject = (ROOT / "pyproject.toml").read_text("utf-8")
 
     assert f'version = "{__version__}"' in pyproject
-    assert '"Development Status :: 4 - Beta"' in pyproject
+    assert '"Development Status :: 5 - Production/Stable"' in pyproject
     assert (
         'Repository = "https://github.com/Marker-Inc-Korea/ko-sqlguard"'
         in pyproject

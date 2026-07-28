@@ -19,13 +19,14 @@ from .result import (
     Action,
     GuardBlocked,
     GuardResult,
+    GuardTelemetry,
     Severity,
     Verdict,
     Violation,
 )
 from .semantic import SemanticReviewer
 
-__version__ = "0.2.0"
+__version__ = "1.0.0"
 
 __all__ = [
     "Action",
@@ -33,6 +34,7 @@ __all__ = [
     "GuardBlocked",
     "GuardPolicy",
     "GuardResult",
+    "GuardTelemetry",
     "SemanticReviewer",
     "Severity",
     "Verdict",

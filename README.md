@@ -2,7 +2,7 @@
 
 [![CI](https://github.com/Marker-Inc-Korea/ko-sqlguard/actions/workflows/tests.yml/badge.svg)](https://github.com/Marker-Inc-Korea/ko-sqlguard/actions/workflows/tests.yml)
 [![Python 3.10+](https://img.shields.io/badge/python-3.10%2B-0b7285)](https://github.com/Marker-Inc-Korea/ko-sqlguard/blob/main/pyproject.toml)
-[![Status: Beta](https://img.shields.io/badge/status-beta-c57b00)](./CHANGELOG.md)
+[![Status: Production/Stable](https://img.shields.io/badge/status-production%2Fstable-1f6f43)](./CHANGELOG.md)
 
 > LLM이 생성한 PostgreSQL 쿼리를 **실행하기 전에** sqlglot AST로 검사하는 결정론적 가드레일. 파싱만 하고 절대 실행하지 않는다(fail-closed).
 
@@ -55,6 +55,7 @@ ko-sqlguard는 LLM 서빙 파이프라인에서 **tool SQL 경로**를 담당한
 | 검사 / 진입점 | violation code | 무엇을 잡는가 |
 |---|---|---|
 | `guard.check()` (상단) | `empty` / `parse_error` | 빈 입력·파싱 실패·미실행 구문을 fail-closed BLOCK |
+| `guard.check()` (파싱 전) | `query_too_many_characters` / `query_too_many_bytes` | `max_query_chars`(기본 100,000)와 UTF-8 `max_query_bytes`(기본 400,000) 상한을 넘는 입력을 parser 작업 전에 CRITICAL BLOCK |
 | `guard.check()` (상단) | `multi_statement` | 한 입력에 2개 이상 문장(스택드/피기백 쿼리) 차단 |
 | `check_statement_type` | `statement_type` | 읽기 외 구문(INSERT/UPDATE/DELETE/DDL/MERGE/COPY/SET 등), 권한 없는 MERGE·`ON CONFLICT DO UPDATE` 에스컬레이션 |
 | `check_statement_type` | `select_into` | `SELECT ... INTO`(읽기로 위장한 테이블 생성) |
@@ -108,6 +109,8 @@ guard = Guard(
     GuardPolicy(
         allowed_tables={"orders": [], "customers": ["id", "name"]},  # [] = 전 컬럼 허용
         default_limit=500,
+        max_query_chars=100_000,
+        max_query_bytes=400_000,
     )
 )
 
@@ -129,6 +132,19 @@ except GuardBlocked as e:
 # 모듈 레벨 편의 함수도 동일
 from ko_sqlguard import check
 check("SELECT pg_sleep(10)").verdict is Verdict.BLOCK   # True
+```
+
+`result.forward_safe`는 `result.sql`을 DB 경로로 전달해도 되는지를 명시한다. 원문 SQL과
+상세 reason을 로그/metrics로 보내지 말고 `result.to_telemetry()`의 `verdict`,
+`forward_safe`, `violation_codes`, `highest_severity`만 사용한다.
+
+운영 allowlist 계약은 배포 시 명시적으로 검증한다. `allowed_tables={}`는 유효하며 모든
+테이블 접근을 차단한다. 반면 기존 호환성을 위해 남아 있는 `allowed_tables=None`은 이 검증에서
+거부된다.
+
+```python
+policy = GuardPolicy(allowed_tables={"orders": ["id", "status"]})
+policy.validate_production()
 ```
 
 ```python

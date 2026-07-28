@@ -64,6 +64,46 @@ class Guard:
         policy = self.policy
         original = sql
 
+        # Bound raw input before parser allocation/recursion. Character and UTF-8
+        # byte limits are intentionally independent for multibyte SQL input.
+        if len(sql) > policy.max_query_chars:
+            return _block(
+                "",
+                Violation(
+                    code="query_too_many_characters",
+                    severity=Severity.CRITICAL,
+                    reason=(
+                        f"query has {len(sql)} characters; maximum is "
+                        f"{policy.max_query_chars}"
+                    ),
+                    fix=f"Reduce the SQL input to at most {policy.max_query_chars} characters.",
+                ),
+            )
+        try:
+            byte_length = len(sql.encode("utf-8"))
+        except UnicodeEncodeError:
+            return _block(
+                "",
+                Violation(
+                    code="query_invalid_encoding",
+                    severity=Severity.CRITICAL,
+                    reason="query is not valid UTF-8 text",
+                ),
+            )
+        if byte_length > policy.max_query_bytes:
+            return _block(
+                "",
+                Violation(
+                    code="query_too_many_bytes",
+                    severity=Severity.CRITICAL,
+                    reason=(
+                        f"query has {byte_length} UTF-8 bytes; maximum is "
+                        f"{policy.max_query_bytes}"
+                    ),
+                    fix=f"Reduce the SQL input to at most {policy.max_query_bytes} UTF-8 bytes.",
+                ),
+            )
+
         if not sql or not sql.strip():
             return _block(
                 original,

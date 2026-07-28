@@ -25,8 +25,11 @@ BLOCK이면 `safe_sql=null`과 reason code만 반환한다. 서비스나 감사 
 재노출하지 않는다.
 
 기본 서비스 정책의 `allowed_tables={}`는 모든 테이블 접근을 차단한다. 실제 배포 전에
-애플리케이션별 테이블·컬럼 allowlist를 공용 배포 저장소의 `sql-production.json`에 명시해야 한다.
-readiness는 read-only, write 비활성, explicit allowlist, LIMIT, inference/catalog gate와
+애플리케이션별 테이블·컬럼 allowlist를 공용 배포 저장소의 `sql-production.json`에 명시하고,
+로드한 정책에 `validate_production()`을 호출해야 한다. 이 검증은 `allowed_tables=None`과
+allowlist 위반을 advisory로 만드는 `min_block_severity=CRITICAL`을 거부하며, 명시적 `{}`는
+deny-all 정책으로 허용한다. readiness는 read-only, write 비활성, explicit allowlist, LIMIT,
+inference/catalog gate와
 stacked-query canary를 확인한다. 실제 DB 계정에는 별도로 최소 권한, read-only transaction,
 statement timeout과 row-level security를 적용해야 한다.
 

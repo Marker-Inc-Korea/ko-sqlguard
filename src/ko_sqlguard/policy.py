@@ -558,6 +558,11 @@ DEFAULT_SENSITIVE_COLUMNS: frozenset[str] = frozenset(
 class GuardPolicy(BaseModel):
     model_config = ConfigDict(frozen=True)
 
+    # Bound untrusted input before it reaches sqlglot. Byte length is measured as
+    # UTF-8 because Python character counts understate multibyte SQL input.
+    max_query_chars: int = Field(default=100_000, ge=1)
+    max_query_bytes: int = Field(default=400_000, ge=1)
+
     # --- parsing dialect ---
     # Primary sqlglot dialect — 배포 DB 에 맞춰 설정(MySQL 이면 "mysql", MSSQL 이면 "tsql" 등).
     # 위험 검사(denylist)는 cross-dialect 라 파싱만 다이얼렉트별이다.
@@ -647,6 +652,25 @@ class GuardPolicy(BaseModel):
             value = getattr(self, name)
             if value is not None and value < 1:
                 raise ValueError(f"{name} must be >= 1 or None")
+        return self
+
+    def validate_production(self) -> GuardPolicy:
+        """Validate the explicit table-allowlist contract for a production policy.
+
+        ``allowed_tables={}`` is valid and intentionally means deny all table
+        access. ``None`` remains supported for backwards compatibility, but is
+        unsuitable for deployments that require an allowlist.
+        """
+        if self.allowed_tables is None:
+            raise ValueError(
+                "production policy requires an explicit allowed_tables mapping; "
+                "use {} to deny all table access"
+            )
+        if self.min_block_severity > Severity.HIGH:
+            raise ValueError(
+                "production policy requires min_block_severity <= HIGH so "
+                "table and column allowlist violations block"
+            )
         return self
 
     normalized_allowed: dict[str, frozenset[str] | None] | None = Field(
