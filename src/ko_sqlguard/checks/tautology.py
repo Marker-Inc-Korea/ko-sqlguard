@@ -48,7 +48,8 @@ _SELF_FALSE = (exp.NEQ, exp.GT, exp.LT)   # x op x is FALSE for these
 def _is_null_test(node: exp.Expression) -> tuple[exp.Expression, bool] | None:
     """If ``node`` is ``x IS NULL`` / ``x IS NOT NULL`` return (x, negated) else None.
 
-    ``x IS NOT NULL`` parses as ``Not(Is(x, Null))``.
+    ``x IS NOT NULL`` may parse as ``Not(Is(x, Null))`` or normalize to an
+    ``Is`` node carrying ``negate=True``, depending on the sqlglot phase/version.
     """
     while isinstance(node, exp.Paren):
         node = node.this
@@ -59,7 +60,7 @@ def _is_null_test(node: exp.Expression) -> tuple[exp.Expression, bool] | None:
         while isinstance(node, exp.Paren):
             node = node.this
     if isinstance(node, exp.Is) and isinstance(node.expression, exp.Null):
-        return (node.this, negated)
+        return (node.this, negated ^ bool(node.args.get("negate")))
     return None
 
 
