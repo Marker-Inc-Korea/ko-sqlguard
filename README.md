@@ -2,11 +2,26 @@
 
 [![CI](https://github.com/Marker-Inc-Korea/ko-sqlguard/actions/workflows/tests.yml/badge.svg)](https://github.com/Marker-Inc-Korea/ko-sqlguard/actions/workflows/tests.yml)
 [![Python 3.10+](https://img.shields.io/badge/python-3.10%2B-0b7285)](https://github.com/Marker-Inc-Korea/ko-sqlguard/blob/main/pyproject.toml)
-[![Status: Production/Stable](https://img.shields.io/badge/status-production%2Fstable-1f6f43)](./CHANGELOG.md)
+[![Software: Stable](https://img.shields.io/badge/software-stable-1f6f43)](./CHANGELOG.md)
 
 > LLM이 생성한 PostgreSQL 쿼리를 **실행하기 전에** sqlglot AST로 검사하는 결정론적 가드레일. 파싱만 하고 절대 실행하지 않는다(fail-closed).
 
 ---
+
+## 제품 계약
+
+| 항목 | 운영 정의 |
+|---|---|
+| 주 고객 | read-only NL2SQL·업무 에이전트를 운영하는 데이터·AI 플랫폼 팀 |
+| 고객 과업 | 모델 SQL을 허용된 테이블·컬럼·구문·결과 크기·비용 범위 안에 제한 |
+| 보장 범위 | 파싱 가능한 SQL의 결정론 AST 정책과 fail-closed 결과 |
+| 비보장 범위 | 사용자 업무 권한, 허용 쿼리의 반복 추론, DB 취약점, 쿼리 결과의 PII 누출 |
+| 필수 운영 통제 | 명시적 allowlist, read-only 최소권한 DB role, statement timeout, row/connection quota |
+| 상태 해석 | `Software: Stable`과 고객 스키마에서의 `Tenant-qualified`는 별도 상태 |
+
+이 제품은 다섯 구성요소 중 가장 좁은 책임 경계를 가진다. 따라서 위 필수 통제와 운영
+스키마 검증을 완료한 뒤 첫 production 적용 대상으로 삼을 수 있지만, DB 권한과 결과
+후처리를 대신하는 “SQL 보안 완제품”으로 표현하지 않는다.
 
 ## 무엇을 위한 도구인가
 
