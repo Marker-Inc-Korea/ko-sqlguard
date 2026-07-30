@@ -6,6 +6,8 @@
 
 ### Documentation
 
+- SQL 가드가 필요한 이유, 독립 저장소로 배포하는 이유와 `ko-` 네이밍의 의미를
+  명확히 했습니다. 언어 특화 주장 대신 LLM SQL 실행 전 정책 경계로 정의했습니다.
 - 소프트웨어 안정성과 고객 스키마 qualification을 분리하고, 운영에 필요한 allowlist,
   최소권한 DB role, timeout·quota와 비보장 범위를 제품 계약으로 추가했습니다.
 
