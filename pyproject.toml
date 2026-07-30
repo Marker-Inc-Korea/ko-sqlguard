@@ -36,6 +36,9 @@ dev = [
     "ruff>=0.4,<1",
     "mypy>=1.10,<2",
 ]
+integration = [
+    "psycopg[binary]>=3.1,<4",
+]
 demo = [
     "streamlit>=1.29",
 ]

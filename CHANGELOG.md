@@ -9,6 +9,10 @@
 - 소프트웨어 안정성과 고객 스키마 qualification을 분리하고, 운영에 필요한 allowlist,
   최소권한 DB role, timeout·quota와 비보장 범위를 제품 계약으로 추가했습니다.
 
+### Added
+
+- PostgreSQL 17 서비스에서 실제 `EXPLAIN` 비용 gate를 실행하는 독립 CI job을 추가했습니다.
+
 ## 1.0.0 - 2026-07-28
 
 ### Changed
