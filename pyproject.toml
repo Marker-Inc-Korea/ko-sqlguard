@@ -34,7 +34,7 @@ Changelog = "https://github.com/Marker-Inc-Korea/ko-sqlguard/blob/main/CHANGELOG
 dev = [
     "pytest>=8.0,<9",
     "ruff>=0.4,<1",
-    "mypy>=1.10,<2",
+    "mypy>=1.10,<3",
 ]
 integration = [
     "psycopg[binary]>=3.1,<4",
