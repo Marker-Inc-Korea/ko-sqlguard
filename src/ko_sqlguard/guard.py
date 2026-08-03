@@ -163,6 +163,7 @@ class Guard:
             violations += checks.check_functions(working, policy)
             violations += checks.check_catalog(working, policy)
             violations += checks.check_sensitive_columns(working, policy)
+            violations += checks.check_pii_columns(working, policy)
             violations += checks.check_tables(working, policy)
             violations += checks.check_columns(working, policy)
             violations += checks.check_require_where(working, policy)

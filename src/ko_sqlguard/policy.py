@@ -624,7 +624,9 @@ class GuardPolicy(BaseModel):
     cost_threshold: float | None = None  # block if planner Total Cost exceeds this
     max_estimated_rows: int | None = None  # block if planner Plan Rows exceeds this
 
-    # --- Tier-2 seam: not enforced in v1 ---
+    # Table-specific PII denylist compiled from an offline schema catalog. Unlike
+    # sensitive_columns, the same column name may be PII in one table and benign
+    # in another. check() consumes metadata only; it never discovers a schema.
     pii_columns: dict[str, list[str]] | None = None
 
     # Block-violations below this severity are downgraded to advisory warns. The
@@ -676,6 +678,9 @@ class GuardPolicy(BaseModel):
     normalized_allowed: dict[str, frozenset[str] | None] | None = Field(
         default=None, exclude=True, repr=False
     )
+    normalized_pii_columns: dict[str, frozenset[str]] | None = Field(
+        default=None, exclude=True, repr=False
+    )
 
     @model_validator(mode="after")
     def _normalize_allowlist(self) -> GuardPolicy:
@@ -688,6 +693,26 @@ class GuardPolicy(BaseModel):
             key = table.strip().lower()
             normalized[key] = frozenset(c.strip().lower() for c in columns) if columns else None
         object.__setattr__(self, "normalized_allowed", normalized)
+        return self
+
+    @model_validator(mode="after")
+    def _normalize_pii_columns(self) -> GuardPolicy:
+        if self.pii_columns is None:
+            object.__setattr__(self, "normalized_pii_columns", None)
+            return self
+        normalized: dict[str, frozenset[str]] = {}
+        for table, columns in self.pii_columns.items():
+            key = table.strip().lower()
+            if not key:
+                raise ValueError("pii_columns table names must not be empty")
+            values = []
+            for column in columns:
+                value = column.strip().lower()
+                if not value:
+                    raise ValueError("pii_columns column names must not be empty")
+                values.append(value)
+            normalized[key] = normalized.get(key, frozenset()).union(values)
+        object.__setattr__(self, "normalized_pii_columns", normalized)
         return self
 
     # Pre-folded denylists used by checks/catalog.py. Excluded from repr/serialization.

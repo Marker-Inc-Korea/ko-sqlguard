@@ -14,6 +14,9 @@
 ### Added
 
 - PostgreSQL 17 서비스에서 실제 `EXPLAIN` 비용 gate를 실행하는 독립 CI job을 추가했습니다.
+- 오프라인 schema snapshot에서 받은 `pii_columns`를 테이블별로 집행합니다. 직접 컬럼,
+  별칭, CTE·파생테이블 내부, `SELECT *`, whole-row와 암시적 join 접근을 순수 AST 검사로
+  차단합니다.
 
 ## 1.0.0 - 2026-07-28
 
