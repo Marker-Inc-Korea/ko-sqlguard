@@ -2,8 +2,8 @@
 
 ## Supported Versions
 
-보안 수정은 `main`과 최신 태그에 우선 적용합니다. 현재 `0.2.0`은 Beta 릴리스 후보이며,
-stable 지원을 주장하지 않습니다.
+현재 지원 브랜치는 `main`입니다. Software Stable은 API와 패키지 품질 상태이며, 고객별
+정책·스키마 qualification이나 운영 효과 보증과는 별개입니다.
 
 ## Reporting
 
