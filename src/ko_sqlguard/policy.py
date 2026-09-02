@@ -1,7 +1,8 @@
-"""GuardPolicy: the single Pydantic model that configures every deterministic check.
+"""GuardPolicy: the single Pydantic model for deterministic and DB-backed checks.
 
-Tier-2 seams (`pii_columns`, `cost_threshold`) are exposed here for API stability but
-are NOT enforced in v1 — see cost.py / semantic.py.
+``pii_columns`` is enforced by :meth:`Guard.check`; planner thresholds are enforced
+only through the explicit cost or guarded-execution APIs because they require a live
+database connection.
 """
 from __future__ import annotations
 

@@ -251,13 +251,18 @@ class Guard:
             raise GuardBlocked(result)
         return result.sql
 
-    def check_cost(self, sql: str, connection: object) -> GuardResult:
+    def check_cost(
+        self,
+        sql: str,
+        connection: object,
+        parameters: object | None = None,
+    ) -> GuardResult:
         """Tier-2 EXPLAIN cost guard. NOT part of the pure hot path — it talks to
         a database via ``connection`` (any DB-API 2.0 connection). Call this only
         on SQL that already passed ``check()``. See ``ko_sqlguard.cost``."""
         from .cost import explain_cost_guard
 
-        return explain_cost_guard(sql, self.policy, connection)
+        return explain_cost_guard(sql, self.policy, connection, parameters)
 
 
 def check(sql: str, policy: GuardPolicy | None = None) -> GuardResult:

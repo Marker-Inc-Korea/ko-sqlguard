@@ -52,10 +52,21 @@ def _extract_plan(raw: Any) -> dict[str, Any]:
     return plan
 
 
-def _explain(sql: str, connection: Any) -> dict[str, Any]:
+def _explain(
+    sql: str,
+    connection: Any,
+    parameters: object | None = None,
+) -> dict[str, Any]:
     cur = connection.cursor()
     try:
-        cur.execute(f"{_EXPLAIN_PREFIX} {sql}")
+        explain_sql = f"{_EXPLAIN_PREFIX} {sql}"
+        if parameters is None:
+            cur.execute(explain_sql)
+        else:
+            # Keep values out of the SQL string. PostgreSQL can plan a
+            # parameterized EXPLAIN through the same DB-API binding contract
+            # used by the eventual execution.
+            cur.execute(explain_sql, parameters)
         row = cur.fetchone()
     finally:
         cur.close()
@@ -68,6 +79,7 @@ def explain_cost_guard(
     sql: str,
     policy: GuardPolicy,
     connection: Any,
+    parameters: object | None = None,
 ) -> GuardResult:
     """Block ``sql`` if the planner's estimated cost or row count is too high.
 
@@ -75,13 +87,14 @@ def explain_cost_guard(
     ``explain_failed`` violation, or PASS. Pass ``sql`` that has already cleared
     ``Guard.check()``. Set ``policy.cost_threshold`` and/or
     ``policy.max_estimated_rows`` to enable the respective limit; with neither
-    set this is a no-op PASS (nothing to enforce).
+    set this is a no-op PASS (nothing to enforce). ``parameters`` are passed to
+    the DB-API cursor separately and are never interpolated into the EXPLAIN SQL.
     """
     if policy.cost_threshold is None and policy.max_estimated_rows is None:
         return GuardResult(verdict=Verdict.PASS, sql=sql, original_sql=sql, violations=())
 
     try:
-        plan = _explain(sql, connection)
+        plan = _explain(sql, connection, parameters)
     except Exception as exc:  # fail-closed: we could not prove it is cheap
         return GuardResult(
             verdict=Verdict.BLOCK,

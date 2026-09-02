@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "ko-sqlguard"
-version = "1.0.0"
+version = "1.1.0"
 description = "Deterministic, parse-only guardrails for LLM-generated PostgreSQL queries"
 readme = "README.md"
 requires-python = ">=3.10"
@@ -42,6 +42,9 @@ integration = [
 demo = [
     "streamlit>=1.29",
 ]
+
+[project.scripts]
+ko-sqlguard = "ko_sqlguard.cli:main"
 
 [tool.setuptools.packages.find]
 where = ["src"]

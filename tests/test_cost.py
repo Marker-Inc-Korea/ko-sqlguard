@@ -18,11 +18,11 @@ class FakeCursor:
     def __init__(self, row: object = None, raise_on_execute: Exception | None = None) -> None:
         self.row = row
         self.raise_on_execute = raise_on_execute
-        self.executed: str | None = None
+        self.executed: tuple[object, ...] | None = None
         self.closed = False
 
-    def execute(self, sql: str) -> None:
-        self.executed = sql
+    def execute(self, *args: object) -> None:
+        self.executed = args
         if self.raise_on_execute is not None:
             raise self.raise_on_execute
 
@@ -116,11 +116,28 @@ def test_accepts_json_string_result() -> None:
 def test_never_runs_analyze() -> None:
     conn = FakeConn(plan_row(10.0, 10))
     explain_cost_guard("SELECT * FROM orders", LIMITS, conn)
-    sql = (conn.cur.executed or "").upper()
+    sql = str((conn.cur.executed or ("",))[0]).upper()
     assert sql.startswith("EXPLAIN")
     assert "ANALYZE FALSE" in sql
     assert "ANALYZE TRUE" not in sql
     assert "EXPLAIN ANALYZE" not in sql  # the cardinal sin: would execute the query
+
+
+def test_explain_keeps_parameters_separate() -> None:
+    conn = FakeConn(plan_row(10.0, 1))
+    parameters = ("paid",)
+
+    result = explain_cost_guard(
+        "SELECT * FROM orders WHERE status = %s",
+        LIMITS,
+        conn,
+        parameters,
+    )
+
+    assert result.verdict is Verdict.PASS
+    assert conn.cur.executed is not None
+    assert conn.cur.executed[1] is parameters
+    assert "paid" not in str(conn.cur.executed[0])
 
 
 def test_guard_check_cost_delegates() -> None:

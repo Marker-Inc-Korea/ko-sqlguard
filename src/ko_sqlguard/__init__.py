@@ -14,6 +14,7 @@ from __future__ import annotations
 
 from .cost import explain_cost_guard
 from .guard import Guard, check
+from .integrations import GuardedExecution, execute_guarded
 from .policy import GuardPolicy
 from .result import (
     Action,
@@ -24,9 +25,10 @@ from .result import (
     Verdict,
     Violation,
 )
+from .schema import SchemaPolicyError, compile_schema_policy
 from .semantic import SemanticReviewer
 
-__version__ = "1.0.0"
+__version__ = "1.1.0"
 
 __all__ = [
     "Action",
@@ -35,11 +37,15 @@ __all__ = [
     "GuardPolicy",
     "GuardResult",
     "GuardTelemetry",
+    "GuardedExecution",
     "SemanticReviewer",
     "Severity",
     "Verdict",
     "Violation",
     "check",
+    "compile_schema_policy",
+    "execute_guarded",
     "explain_cost_guard",
+    "SchemaPolicyError",
     "__version__",
 ]

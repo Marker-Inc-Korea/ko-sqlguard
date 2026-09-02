@@ -4,6 +4,8 @@
 
 ## Unreleased
 
+## 1.1.0 - 2026-09-02
+
 ### Documentation
 
 - SQL 가드가 필요한 이유, 독립 저장소로 배포하는 이유와 `ko-` 네이밍의 의미를
@@ -13,6 +15,13 @@
 
 ### Added
 
+- `ko-sqlguard` 단일 CLI를 추가해 파일·stdin SQL을 실행 없이 검사하고 JSON 판정을 반환합니다.
+- 신뢰한 오프라인 컬럼 목록과 PII 표기를 allowlist/denylist로 변환하는
+  `compile_schema_policy()`를 추가했습니다.
+- 명시적 운영 allowlist, 구조 검사와 선택적 EXPLAIN 비용 검사를 통과한 SQL만 DB-API에
+  전달하는 `execute_guarded()` 통합 경계를 추가했습니다.
+- 파라미터화 쿼리의 비용 검사도 실제 실행과 동일한 DB-API 파라미터를 SQL 문자열과 분리해
+  `EXPLAIN`에 전달합니다.
 - PostgreSQL 17 서비스에서 실제 `EXPLAIN` 비용 gate를 실행하는 독립 CI job을 추가했습니다.
 - 오프라인 schema snapshot에서 받은 `pii_columns`를 테이블별로 집행합니다. 직접 컬럼,
   별칭, CTE·파생테이블 내부, `SELECT *`, whole-row와 암시적 join 접근을 순수 AST 검사로

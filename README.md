@@ -1,3 +1,5 @@
+[English](README.en.md) | **한국어**
+
 # ko-sqlguard
 
 [![CI](https://github.com/Marker-Inc-Korea/ko-sqlguard/actions/workflows/tests.yml/badge.svg)](https://github.com/Marker-Inc-Korea/ko-sqlguard/actions/workflows/tests.yml)
@@ -183,6 +185,25 @@ from ko_sqlguard import check
 check("SELECT pg_sleep(10)").verdict is Verdict.BLOCK   # True
 ```
 
+운영 경계까지 한 번에 묶을 때는 명시적 schema catalog와 실행 어댑터를 사용합니다.
+
+```python
+from ko_sqlguard import Guard, compile_schema_policy, execute_guarded
+
+policy = compile_schema_policy({
+    "orders": ["id", "status"],
+    "customers": {"columns": ["id", {"name": "주민등록번호", "pii_label": "RRN"}]},
+})
+execution = execute_guarded(connection, "SELECT id FROM orders", guard=Guard(policy))
+# 호출자가 transaction, timeout, 최소권한 DB role과 execution.cursor 수명을 관리
+```
+
+CLI는 SQL을 실행하지 않고 JSON 판정만 반환합니다.
+
+```bash
+printf 'SELECT pg_sleep(1)' | ko-sqlguard -
+```
+
 한국어 컬럼명처럼 테이블에 따라 의미가 달라지는 PII는 전역 문자열 denylist가 아니라
 table-specific metadata로 집행합니다. `check()`는 이 metadata만 읽으며 DB 조회나
 `ko-pii` import를 수행하지 않습니다.
@@ -224,7 +245,7 @@ policy.validate_production()
 # (옵션) Tier-2: EXPLAIN 기반 비용 가드 — check() 통과 후, DB 연결로만 호출
 pol = GuardPolicy(cost_threshold=1_000_000)   # 플래너 추정 비용 상한
 guard = Guard(pol)
-# guard.check_cost(sql, connection)  # EXPLAIN(ANALYZE 아님)으로 추정, 초과 시 BLOCK
+# guard.check_cost(sql, connection, parameters)  # 값은 SQL과 분리한 채 EXPLAIN
 ```
 
 `examples/quickstart.py`로 전체 동작을 바로 실행해 볼 수 있다(`python examples/quickstart.py`).
@@ -233,7 +254,7 @@ guard = Guard(pol)
 
 ## 검증
 
-- 로컬 테스트: **752 passed, 5 skipped** (테스트 파일 19개, `pytest`)
+- 로컬 테스트: **768 passed, 5 skipped** (테스트 파일 22개, `pytest`)
 - **적대적 입력 회귀 테스트 포함** — 위험 입력 코퍼스(`tests/fixtures/adversarial.sql`)의
   모든 페이로드가 BLOCK 되는지, 그리고 검사 중 **예외를 던지지 않고**(fail-closed, not fail-crash)
   정상 쿼리는 과탐 없이 통과하는지를 회귀로 고정한다.
@@ -279,7 +300,7 @@ sqlglot 30.x). 추론 모델·네트워크가 없는 **순수 파서/AST 검사*
 | 워밍업 후 지연 (p95) | **약 0.8 ms** | 동일 측정 |
 | 입력별 중앙값 | 정상 **약 0.63 ms** / 악성 **약 0.48 ms** | 각 2,000회 (악성은 위반 발견 시 조기 반환이라 더 빠름) |
 | **처리량**(단일 스레드, 워밍업 후) | **약 1,500 ~ 2,000 calls/sec** | 20,000회 배치 wall-clock (정상 ~1,490 / 악성 ~1,970) |
-| **전체 테스트** | **752 passed, 5 skipped** | `PYTHONPATH=src python -m pytest` |
+| **전체 테스트** | **768 passed, 5 skipped** | `PYTHONPATH=src python -m pytest` |
 
 > 콜드 스타트는 sqlglot 문법의 1회성 지연 컴파일이며 **호출당 비용이 아니다** — 프로세스 기동 시
 > 한 번 `guard.check("SELECT 1")`로 미리 데우면 이후 요청은 전부 워밍업 지연(<1ms)으로 처리된다.
@@ -348,10 +369,12 @@ sqlglot 30.x). 추론 모델·네트워크가 없는 **순수 파서/AST 검사*
 ## 설치
 
 ```bash
-pip install ko-sqlguard
-# 또는 소스에서
-pip install .
+python3 -m pip install \
+  "ko-sqlguard @ git+https://github.com/Marker-Inc-Korea/ko-sqlguard.git@main"
 ```
+
+PyPI 배포 전까지는 위 Git 설치가 공개 설치 정본입니다. 태그·wheel 검증 후 PyPI 명령을
+별도로 안내합니다.
 
 의존성(`pyproject.toml`):
 
@@ -365,32 +388,20 @@ DB 드라이버 의존성은 없다 — Tier-2 비용 가드는 호출자가 넘
 
 ---
 
-## 외부 검증 (제3자 데이터셋, 2026-06)
+## 최신 외부 검증 정본
 
-ko-sqlguard 는 한국어 특화가 아니라 **파싱 전용 글로벌 도구**라, 영어 외부 SQL 벤치마크가 **번역·보정 없이 그대로 유효**하다.
-
-| 데이터셋 (라이선스) | 역할 | n | 결과 |
-|---|---|---:|---|
-| zrmarine/sql_injection | SQLi 공격 | 295 | 차단(recall) **100%** |
-| Pegasus77/sqli (apache-2.0) | SQLi 공격 | 500 | 차단 **99.8%** |
-| 합산 (중복 제거) | SQLi 공격 | 627 | 차단 **99.8%** (626/627) |
-| gretelai/synthetic_text_to_sql (apache-2.0) | 정상 조회 | 600 | reads-only 오차단 **0.18%** (1/548) |
-| b-mc2/sql-create-context (cc-by-4.0) | 정상 SELECT | 500 | 오차단 **0.60%** |
-| xlangai/spider (cc-by-sa-4.0) | 정상 SELECT | 500 | 오차단 **0.60%** |
-
-> gretelai 600건 중 51건은 write/DDL 로, read-only 가드가 마땅히 차단한다(50/51 차단=정상 동작). 따라서 과탐 지표는 **읽기 쿼리 548건 기준 1건(0.18%)**으로 본다.
-
-→ **실제 SQL 인젝션 약 99.8% 차단**(zrmarine 100% · pegasus 99.8%), **정상 읽기 조회 오차단 1% 미만** → 합산 기준 **precision 99.8% / F1 1.00**(공격 627건 vs 정상 읽기 548건). 결정론 파서가 recall·precision 양쪽에서 강한 영역(언어무관 도구라 base-rate 왜곡도 작다).
-
-**개선 (2026-06).** 외부 벤치마크에서 tautology 게이트를 빠져나가던 **추론형(블라인드) SQLi**를 분석해 전용 탐지기(`checks/inference.py`)를 추가했다 — 비상관 스칼라 서브쿼리 vs 상수(`(SELECT COUNT(*) …) > 1`), 상수참 `EXISTS`, HAVING/JOIN-ON 위치·RHS 표면변형(음수·산술·CAST·NULL·BETWEEN·IN)까지. 개별로는 정상 파싱돼 통과하던 boolean 오라클을 차단하면서, **상관·필터된 정상 분석 쿼리는 그대로 통과**(reads-only 오차단 회귀 없음). 그 결과 합산(중복제거 627건) 차단율이 **기존 공개본 94.3% → 99.8%**(626/627)로 올랐고(잔여 1건은 정규화 후 read-only SELECT로 환원되는 무해 payload), 회귀는 `tests/test_adversarial_inference.py`로 고정했다.
-
-**개선 (2026-07).** 남은 미탐/오탐을 좁혔다: ⓐ **CASE-오라클** — `SELECT CASE WHEN 1=1 THEN … END`처럼 WHERE 술어 밖(projection·CASE·함수 인자)에 숨은 상수-상수 비교를 문장 전체 스캔으로 차단(비상관 서브쿼리 오라클과 동일한 블라인드 SQLi인데 predicate-root 순회를 벗어나 통과하던 계열), ⓑ **제약된 CROSS JOIN 완화(+OR-우회 수정)** — `a CROSS JOIN b WHERE a.id=b.id`(inner join과 동일)는 연결성 그래프로 판정해 통과, 미제약 CROSS는 차단. 단 연결성은 **top-level AND 등식만** 반영한다 — `a.id=b.id OR b.active=1`처럼 OR 분기에 스푸핑된 등식은 모든 행을 제약하지 못하므로 near-cartesian 폭발로 보아 차단(comma join 동일). 저카디널리티 등식(`status=status`)은 정적 판정 불가라 스코프 아웃(한계), ⓒ **eval 정직화** — `external_sqli.py`의 read-only 판정을 파싱 기반으로 강화해 multi-statement/CTE-write를 benign-read 분모에서 제외. 그 결과 외부 코퍼스 **ATTACK recall 99.05→99.73%**(miss 28→8, 신규 오탐 0/3819), **benign-FPR 0.55→0.29%**. 회귀는 `tests/test_case_oracle_and_cross.py`.
+현재 공개 비교 정본은 위 [경쟁군 대비](#경쟁군-대비-vs-베이스라인-동일-코퍼스)의 중복 제거
+공격 2,955건과 정상 read-only 3,819건 결과입니다. 초기 627건 결과는 범위가 작은 과거 측정이라
+첫 화면의 현재 성능 주장에서는 제외했습니다. 데이터 정의, 제외 기준과 재현 코드는
+`eval/bench_sql_baselines.py`를 함께 확인해야 하며 고객 스키마 qualification을 대체하지 않습니다.
 
 ---
 
 ## 알려진 한계 & 잔여 미탐 (red-team)
 
-ko-sqlguard 는 **PostgreSQL 전용**(sqlglot) AST 파서로, 적대적 레드팀에서 **공격 63/63 차단(우회 0)** 으로 세 가드 중 가장 견고했다. 비차단 공격행은 silent PASS 가 아니라 **TRANSFORM(기본 LIMIT 주입)** 이라 강제된 read-only DB 역할에서 무해하다(defense-in-depth).
+ko-sqlguard 는 **PostgreSQL-first** AST 정책입니다. 다른 dialect는 명시적으로 설정할 수 있지만
+배포 DB와 다른 fallback을 켜면 잘못된 구문을 허용할 수 있으므로 기본은 비활성입니다. 정적 검사는
+DB 권한, 반복 질의에 의한 추론, 실제 실행 비용과 결과 데이터 누출을 단독으로 막지 않습니다.
 
 - **잔여 FP(1건)**: `FROM 테이블 t, generate_series(...)` 처럼 콤마 조인 + 집합반환함수를 쓰는 정상 분석 쿼리를 cartesian 으로 오차단할 수 있다 — `allowed_tables` allowlist 로 튜닝 가능.
 - **범위 밖**: 비-PostgreSQL 방언 고유 구문은 파싱 실패 시 fail-closed BLOCK 으로 처리된다(미탐이 아니라 보수적 차단).
